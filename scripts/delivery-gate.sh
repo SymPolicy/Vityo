@@ -117,8 +117,8 @@ if [[ "$RUN_AUDIT" -eq 1 ]]; then
   if [[ -z "$AUDIT_BIN" ]]; then
     if [[ -x "$ROOT/../styio-audit/bin/styio-audit" ]]; then
       AUDIT_BIN="$ROOT/../styio-audit/bin/styio-audit"
-    elif [[ -x "/home/unka/styio-audit/bin/styio-audit" ]]; then
-      AUDIT_BIN="/home/unka/styio-audit/bin/styio-audit"
+    elif [[ -x "<styio-audit-bin>" ]]; then
+      AUDIT_BIN="<styio-audit-bin>"
     elif command -v styio-audit >/dev/null 2>&1; then
       AUDIT_BIN="$(command -v styio-audit)"
     fi
