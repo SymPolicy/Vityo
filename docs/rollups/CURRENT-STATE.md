@@ -22,8 +22,8 @@
 ## Read Order
 
 1. `NEXT-STAGE-GAP-LEDGER.md`
-2. `../plans/Styio-Ecosystem-File-Governance-Alignment-Plan.md`
-3. `../plans/Styio-View-Implementation-Plan.md`
+2. `../plan/repository-delivery-convergence/Evidence.md`
+3. `../plan/repository-delivery-convergence/Evidence.md`
 4. `../contracts/RuntimeEventAdapter.md`
 5. `../specs/DOCUMENTATION-POLICY.md`
 6. `../teams/DOCS-DELIVERY-RUNBOOK.md`

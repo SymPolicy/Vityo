@@ -46,10 +46,10 @@ Key SSOTs:
 1. `文档策略 -> ../specs/DOCUMENTATION-POLICY.md`
 2. `人机协作规范 -> ../specs/CONTRIBUTOR-AND-AGENT-SPEC.md`
 3. `测试目录 -> ../assets/workflow/TEST-CATALOG.md`
-4. `文件治理镜像 -> ../plans/Styio-Ecosystem-File-Governance-Alignment-Plan.md`
+4. `文件治理镜像 -> ../plan/repository-delivery-convergence/Evidence.md`
 5. `当前状态摘要 -> ../rollups/CURRENT-STATE.md`
 6. `外部审计入口 -> ../audit/README.md`
-7. `后端工具链 handoff -> ../plans/Styio-View-Toolchain-Backend-Handoff-Plan.md`
+7. `后端工具链 handoff -> ../plan/repository-delivery-convergence/Evidence.md`
 
 ## Daily Workflow
 

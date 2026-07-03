@@ -27,8 +27,8 @@ COLLECTION_DIRS = [
     Path("docs/external/for-pafio"),
     Path("docs/external/for-styio"),
     Path("docs/history"),
-    Path("docs/milestones"),
-    Path("docs/plans"),
+    Path("docs/plan"),
+    Path("docs/plan"),
     Path("docs/review"),
     Path("docs/rollups"),
     Path("docs/specs"),
@@ -49,8 +49,8 @@ INDEX_META = {
     "docs/external/for-pafio": ("For Pafio Index", "Provide the generated inventory for `docs/external/for-pafio/`; upstream `pafio` handoff boundaries live in [README.md](./README.md)."),
     "docs/external/for-styio": ("For Styio Index", "Provide the generated inventory for `docs/external/for-styio/`; upstream `styio` handoff boundaries live in [README.md](./README.md)."),
     "docs/history": ("History Index", "Provide the generated inventory for `docs/history/`; recovery-note rules live in [README.md](./README.md)."),
-    "docs/milestones": ("Milestones Index", "Provide the generated inventory for `docs/milestones/`; freeze-batch rules live in [README.md](./README.md)."),
-    "docs/plans": ("Plans Index", "Provide the generated inventory for `docs/plans/`; plan boundaries and sequencing rules live in [README.md](./README.md)."),
+    "docs/plan": ("Milestones Index", "Provide the generated inventory for `docs/plan/`; freeze-batch rules live in [README.md](./README.md)."),
+    "docs/plan": ("Plans Index", "Provide the generated inventory for `docs/plan/`; plan boundaries and sequencing rules live in [README.md](./README.md)."),
     "docs/review": ("Review Index", "Provide the generated inventory for `docs/review/`; open-conflict and unresolved-risk boundaries live in [README.md](./README.md)."),
     "docs/rollups": ("Rollups Index", "Provide the generated inventory for `docs/rollups/`; compressed active summaries live in [README.md](./README.md)."),
     "docs/specs": ("Specs Index", "Provide the generated inventory for `docs/specs/`; collaboration, repository, and documentation-rule boundaries live in [README.md](./README.md)."),
@@ -118,7 +118,7 @@ def child_sort_key(base: Path, path: Path) -> tuple[int, str]:
         stem = path.stem
         if re.match(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", stem):
             return (1, f"{99999999 - int(stem.replace('-', '')):08d}")
-    if base.as_posix() == "docs/milestones" and path.is_dir():
+    if base.as_posix() == "docs/plan" and path.is_dir():
         name = path.name
         if re.match(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", name):
             return (0, f"{99999999 - int(name.replace('-', '')):08d}")

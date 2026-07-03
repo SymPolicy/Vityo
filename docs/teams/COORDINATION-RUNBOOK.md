@@ -16,8 +16,8 @@
 4. 文档策略：[../specs/DOCUMENTATION-POLICY.md](../specs/DOCUMENTATION-POLICY.md)
 5. 人机协作规范：[../specs/CONTRIBUTOR-AND-AGENT-SPEC.md](../specs/CONTRIBUTOR-AND-AGENT-SPEC.md)
 6. 测试目录：[../assets/workflow/TEST-CATALOG.md](../assets/workflow/TEST-CATALOG.md)
-7. 三仓统一总纲镜像：[../plans/Styio-Ecosystem-Delivery-Master-Plan.md](../plans/Styio-Ecosystem-Delivery-Master-Plan.md)
-8. 文件治理对齐计划镜像：[../plans/Styio-Ecosystem-File-Governance-Alignment-Plan.md](../plans/Styio-Ecosystem-File-Governance-Alignment-Plan.md)
+7. 三仓统一总纲镜像：[../plan/repository-delivery-convergence/Evidence.md](../plan/repository-delivery-convergence/Evidence.md)
+8. 文件治理对齐计划镜像：[../plan/repository-delivery-convergence/Evidence.md](../plan/repository-delivery-convergence/Evidence.md)
 
 ## Module Map
 

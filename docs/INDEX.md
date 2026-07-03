@@ -18,8 +18,8 @@
 | `design/` | [Design Index](./design/INDEX.md) | 定义 docs/design/ 作为产品与系统级 SSOT 的范围；具体文件见 INDEX.md。 |
 | `external/` | [External Docs Index](./external/INDEX.md) | 集中维护 styio-view 与外部上游仓库之间的 handoff 文档入口。 |
 | `history/` | [History Index](./history/INDEX.md) | 定义 docs/history/ 的按日记录范围；具体日期索引见 INDEX.md。 |
-| `milestones/` | [Milestones Index](./milestones/INDEX.md) | 定义 docs/milestones/ 中冻结里程碑文档的范围；具体批次索引见 INDEX.md。 |
-| `plans/` | [Plans Index](./plans/INDEX.md) | 定义 docs/plans/ 中跨里程碑实施计划的范围；具体计划索引见 INDEX.md。 |
+| `milestones/` | [Milestones Index](./plan/repository-delivery-convergence/Evidence.md) | 定义 docs/plan/ 中冻结里程碑文档的范围；具体批次索引见 INDEX.md。 |
+| `plans/` | [Plans Index](./plan/repository-delivery-convergence/Evidence.md) | 定义 docs/plan/ 中跨里程碑实施计划的范围；具体计划索引见 INDEX.md。 |
 | `review/` | [Review Index](./review/INDEX.md) | 定义 docs/review/ 中风险、冲突与待裁决问题的范围；索引见 INDEX.md。 |
 | `rollups/` | [Rollups Index](./rollups/INDEX.md) | 提供 styio-view 的压缩活跃摘要与默认阅读入口，让当前状态和活跃缺口能在不先通读 raw history 的前提下被快速定位。 |
 | `specs/` | [Specs Index](./specs/INDEX.md) | 定义 docs/specs/ 中协作、依赖和仓库规则的范围；文件索引见 INDEX.md。 |

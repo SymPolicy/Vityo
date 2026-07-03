@@ -26,12 +26,12 @@
 | 文档目录与更新规则 | `DOCUMENTATION-POLICY.md` | 链接 |
 | 人机协作、变更批处理要求 | `CONTRIBUTOR-AND-AGENT-SPEC.md` | 链接 |
 | 团队 ownership、review routing、handoff | `../teams/COORDINATION-RUNBOOK.md` | 链接 |
-| 三仓统一交付总纲 | `../plans/Styio-Ecosystem-Delivery-Master-Plan.md` | 链接，不重写 milestone 定义 |
-| 三仓文件治理对齐 | `../plans/Styio-Ecosystem-File-Governance-Alignment-Plan.md` | 链接，不重写治理里程碑定义 |
+| 三仓统一交付总纲 | `../plan/repository-delivery-convergence/Evidence.md` | 链接，不重写 milestone 定义 |
+| 三仓文件治理对齐 | `../plan/repository-delivery-convergence/Evidence.md` | 链接，不重写治理里程碑定义 |
 | 第三方依赖清单 | `THIRD-PARTY.md` | 与实现同步更新 |
-| 跨工作流实施计划 | `../plans/Styio-View-Implementation-Plan.md` | 链接 |
+| 跨工作流实施计划 | `../plan/repository-delivery-convergence/Evidence.md` | 链接 |
 | `styio` 对接边界与接口合同 | `../external/for-styio/` | 链接 |
-| 冻结里程碑与任务清单 | `../milestones/<YYYY-MM-DD>/00-Milestone-Index.md` | 链接 |
+| 冻结里程碑与任务清单 | `../plan/<YYYY-MM-DD>/00-Milestone-Index.md` | 链接 |
 | 测试与验收映射 | `../assets/workflow/TEST-CATALOG.md` | 链接 |
 | 架构裁决 | `../adr/` | 只保留决策摘要 |
 | 未决风险与冲突 | `../review/Logic-Conflicts.md` | 链接 |
@@ -39,11 +39,11 @@
 ### 0.4 文档状态
 
 1. `docs/design/` 是产品和系统级 SSOT。
-2. `docs/plans/` 是实施路线，不可覆盖设计边界。
+2. `docs/plan/` 是实施路线，不可覆盖设计边界。
 3. `docs/rollups/` 负责压缩当前状态和活跃缺口，不替代 owner 文档。
 4. `docs/history/` 负责活跃恢复记录；原始历史一旦退役，应迁入 `docs/archive/`。
 5. `docs/archive/` 负责归档 provenance 与 lifecycle 元数据，不用来隐藏仍活跃的 owner 文档。
-6. `docs/milestones/` 是冻结批次；后续若要变更，新增日期目录，不覆盖原批次结论。
+6. `docs/plan/` 是冻结批次；后续若要变更，新增日期目录，不覆盖原批次结论。
 7. `docs/review/` 中的未决问题一旦裁决，应迁入 ADR 并在 review 文档中回填链接。
 
 ## 1. 目录职责
@@ -52,8 +52,8 @@
 |------|----------|
 | `docs/design/` | 产品规格、系统架构、核心术语、不变量 |
 | `docs/specs/` | 文档策略、仓库边界、协作规范、依赖清单 |
-| `docs/plans/` | 跨里程碑实施计划与工作流 |
-| `docs/milestones/` | 冻结的阶段目标、任务表与门禁 |
+| `docs/plan/` | 跨里程碑实施计划与工作流 |
+| `docs/plan/` | 冻结的阶段目标、任务表与门禁 |
 | `docs/adr/` | 架构决策记录 |
 | `docs/review/` | 风险、冲突、待裁决问题 |
 | `docs/assets/` | 测试目录、复用交付资产 |
@@ -75,8 +75,8 @@
 3. 新增一个长期架构边界时，必须新增 ADR，不能只写在计划或里程碑里。
 4. 新增一个重要风险但尚未裁决时，先写入 `review/Logic-Conflicts.md`。
 5. 若一次变更改变了维护责任、review 触发条件或恢复路径，必须同步更新受影响的 `../teams/*.md` 与 `../teams/COORDINATION-RUNBOOK.md`。
-6. 若一次变更改动了三仓共同里程碑、repo exit、checkpoint ID 或跨仓 cutover 条件，必须先更新 `../plans/Styio-Ecosystem-Delivery-Master-Plan.md` 镜像，再更新 `../plans/Styio-View-Implementation-Plan.md` 与对应 handoff 文档。
-7. 若一次变更改动了 docs tree、索引生成规则、archive/rollup lifecycle、ignore-policy 或 fixture 反忽略规则，必须先更新 `../plans/Styio-Ecosystem-File-Governance-Alignment-Plan.md` 镜像，再更新本文件、`../teams/COORDINATION-RUNBOOK.md` 和受影响目录入口。
+6. 若一次变更改动了三仓共同里程碑、repo exit、checkpoint ID 或跨仓 cutover 条件，必须先更新 `../plan/repository-delivery-convergence/Evidence.md` 镜像，再更新 `../plan/repository-delivery-convergence/Evidence.md` 与对应 handoff 文档。
+7. 若一次变更改动了 docs tree、索引生成规则、archive/rollup lifecycle、ignore-policy 或 fixture 反忽略规则，必须先更新 `../plan/repository-delivery-convergence/Evidence.md` 镜像，再更新本文件、`../teams/COORDINATION-RUNBOOK.md` 和受影响目录入口。
 8. docs tree 变化后，必须运行 `python3 scripts/docs-lifecycle.py refresh`、`python3 scripts/docs-index.py --write`、`python3 scripts/docs-audit.py`。
 9. 根 `.gitignore` 若扩展 temp/build/log/cache 忽略规则，必须同批补 `docs/**` 与 `frontend/styio_view_app/test/**` 的显式 negate 规则，并让 `python3 scripts/repo-hygiene-gate.py --mode tracked` 通过。
 

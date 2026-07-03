@@ -28,7 +28,7 @@ Key SSOTs:
 
 1. `系统架构 -> ../design/Styio-View-System-Architecture.md`
 2. `仓库边界 -> ../specs/REPOSITORY-MAP.md`
-3. `实现计划 -> ../plans/Styio-View-Implementation-Plan.md`
+3. `实现计划 -> ../plan/repository-delivery-convergence/Evidence.md`
 4. `卸载与 hosted 保留策略 -> ../adr/ADR-0015-uninstall-reclamation-and-hosted-workspace-retention.md`
 
 ## Daily Workflow
