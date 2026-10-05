@@ -40,7 +40,7 @@ INDEX_META = {
     "docs/adr": ("ADR Index", "Provide the generated inventory for `docs/adr/`; decision-record conventions live in [README.md](./README.md)."),
     "docs/archive": ("Archive Index", "Provide the generated inventory for `docs/archive/`; archive boundaries and lifecycle rules live in [README.md](./README.md)."),
     "docs/archive/history": ("Archive History Index", "Provide the generated inventory for `docs/archive/history/`; archived daily provenance snapshots live in [README.md](./README.md)."),
-    "docs/audit": ("Audit Index", "Provide the generated inventory for `docs/audit/`; transient defect records live in ignored `docs/audit/defects/` and are enforced by external `styio-audit` runs."),
+    "docs/audit": ("Audit Index", "Provide the generated inventory for `docs/audit/`; transient defect records live in ignored `docs/audit/defects/` and are enforced by General-Auditor runs."),
     "docs/assets": ("Assets Index", "Provide the generated inventory for `docs/assets/`; reusable workflow assets and templates live in [README.md](./README.md)."),
     "docs/assets/workflow": ("Workflow Assets Index", "Provide the generated inventory for `docs/assets/workflow/`; test and workflow assets live in [README.md](./README.md)."),
     "docs/contracts": ("Contracts Index", "Provide the generated inventory for `docs/contracts/`; adapter-contract boundaries live in [README.md](./README.md)."),

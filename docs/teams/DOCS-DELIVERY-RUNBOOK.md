@@ -69,7 +69,7 @@ Key SSOTs:
 14. 本轮最小闭环只要求 `repo-hygiene --mode tracked`、`docs-audit`、Flutter analyze/test 和三仓合同测试；product gate 项保持 `STYIO_VIEW_PRODUCT_GATE=1` 的显式扩展验证，不写成默认必过项。
 15. Keep [../specs/POST-COMMIT-CI-CHECKS.md](../specs/POST-COMMIT-CI-CHECKS.md) aligned with actual GitHub Actions monitoring practice whenever commit, push, or CI handoff rules change.
 16. 外部上游 handoff 统一收在 `docs/external/for-*`，不要在 docs 根目录重新创建 `for-*` collection。
-17. Keep [../specs/TECHNOLOGY-COMPONENT-INVENTORY.md](../specs/TECHNOLOGY-COMPONENT-INVENTORY.md) aligned with `styio-audit` whenever the technology stack, internal components, open-source components, dependency manifests, Apache-2.0 evidence, commercial-risk boundaries, or UI asset-source evidence changes.
+17. Keep [../specs/TECHNOLOGY-COMPONENT-INVENTORY.md](../specs/TECHNOLOGY-COMPONENT-INVENTORY.md) aligned with `General-Auditor` whenever the technology stack, internal components, open-source components, dependency manifests, Apache-2.0 evidence, commercial-risk boundaries, or UI asset-source evidence changes.
 18. Maintain GitHub merge gates through Rulesets rather than legacy classic branch protection; audit effective branch rules when required status-check governance changes.
 19. Keep `.github/workflows/ci.yml`, [../specs/GOLDEN-STANDARD-TEST-SUITE.md](../specs/GOLDEN-STANDARD-TEST-SUITE.md), and [../specs/POST-COMMIT-CI-CHECKS.md](../specs/POST-COMMIT-CI-CHECKS.md) aligned when platform-adaptation, smoke, golden-standard, or branch-promotion gates change. Managed product branches are `release`, `stable`, and `nightly`; every other branch name is temporary.
 
@@ -89,7 +89,7 @@ python3 scripts/repo-hygiene-gate.py --mode tracked
 ./scripts/delivery-gate.sh --mode checkpoint --skip-health
 ```
 
-`scripts/delivery-gate.sh` 会在交付时统一组合 repo hygiene、docs gate、external styio-audit 和 checkpoint health。
+`scripts/delivery-gate.sh` 会在交付时统一组合 repo hygiene、docs gate、external General-Auditor 和 checkpoint health。
 
 ## Cross-Team Dependencies
 
