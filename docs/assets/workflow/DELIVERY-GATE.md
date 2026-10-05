@@ -24,11 +24,11 @@ Docs/process-only delivery:
 ./scripts/delivery-gate.sh --mode checkpoint --skip-health
 ```
 
-Run the local audit route documented in `GENERAL-AUDITOR.md`.
+Run the local audit route documented in the repository-root `GENERAL-AUDITOR.md`.
 
 ## What It Runs
 
 1. `python3 scripts/repo-hygiene-gate.py`
 2. `./scripts/docs-gate.sh`
-Run the local audit route documented in `GENERAL-AUDITOR.md`.
+Run the local audit route documented in the repository-root `GENERAL-AUDITOR.md`.
 4. `./scripts/checkpoint-health.sh`
