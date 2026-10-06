@@ -66,3 +66,6 @@ docs/audit/defects/
 !frontend/styio_view_app/test/**/tmp/**
 !frontend/styio_view_app/test/**/*.tmp
 !frontend/styio_view_app/test/**/*.log
+
+# Private General-Auditor source evidence and local reports.
+/.general-auditor/local/
