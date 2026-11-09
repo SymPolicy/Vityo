@@ -94,8 +94,8 @@ INTENTIONAL_FIXTURE_RULES: tuple[
     (
         "products/vityo_app/test/observable_graph_surface_test.dart",
         "Unix home-directory path",
-        re.compile(r"textContaining\('/(?:Users|home)/'\)"),
-        "Assertions verify the observable graph surface never renders home-directory paths.",
+        re.compile(r"textContaining\('/(?:Users|home)/'\),\s*findsNothing"),
+        "Negative assertions verify the observable graph surface never renders home-directory paths.",
     ),
     (
         "products/vityo_app/test/platform_context_test.dart",
