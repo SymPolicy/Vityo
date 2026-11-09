@@ -23,9 +23,10 @@ REQUIRED_COLLECTION_DIRS = [
     DOCS / "external",
     DOCS / "external" / "for-pafio",
     DOCS / "external" / "for-styio",
+    DOCS / "governance",
     DOCS / "history",
-    DOCS / "milestones",
-    DOCS / "plans",
+    DOCS / "plan",
+    DOCS / "release",
     DOCS / "review",
     DOCS / "rollups",
     DOCS / "specs",
@@ -34,7 +35,7 @@ REQUIRED_COLLECTION_DIRS = [
 ]
 PURPOSE_RE = re.compile(r"^\*\*Purpose:\*\*\s+.+$", re.M)
 LAST_UPDATED_RE = re.compile(r"^\*\*Last updated:\*\*\s+[0-9]{4}-[0-9]{2}-[0-9]{2}\s*$", re.M)
-DATE_FILE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$")
+DATE_ONLY_FILE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$")
 
 
 def check_collections() -> list[str]:
@@ -68,8 +69,11 @@ def check_history_names() -> list[str]:
         for path in sorted(base.glob("*.md")):
             if path.name in {"README.md", "INDEX.md"}:
                 continue
-            if not DATE_FILE_RE.match(path.name):
-                errors.append(f"dated history file must use YYYY-MM-DD.md: {path.relative_to(ROOT).as_posix()}")
+            if DATE_ONLY_FILE_RE.match(path.name):
+                errors.append(
+                    "history files must use descriptive topic names, not "
+                    f"date-only names: {path.relative_to(ROOT).as_posix()}"
+                )
     return errors
 
 
@@ -88,7 +92,7 @@ def main() -> int:
     errors.extend(check_history_names())
     errors.extend(run_check([sys.executable, "scripts/docs-index.py", "--check"]))
     errors.extend(run_check([sys.executable, "scripts/docs-lifecycle.py", "validate"]))
-    if os.environ.get("STYIO_SKIP_TEAM_DOC_GATE") != "1":
+    if os.environ.get("VITYO_SKIP_TEAM_DOC_GATE") != "1":
         errors.extend(run_check([sys.executable, "scripts/team-docs-gate.py"]))
 
     if errors:

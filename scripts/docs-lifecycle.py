@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -15,10 +14,10 @@ HISTORY = DOCS / "history"
 ROLLUPS = DOCS / "rollups"
 ARCHIVE = DOCS / "archive"
 ARCHIVE_HISTORY = ARCHIVE / "history"
+ACTIVE_GAPS_PATH = DOCS / "design" / "Vityo-Implementation-Gaps.md"
 MANIFEST_PATH = ARCHIVE / "ARCHIVE-MANIFEST.json"
 LEDGER_PATH = ARCHIVE / "ARCHIVE-LEDGER.md"
 TODAY = date.today().isoformat()
-DATE_FILE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$")
 
 
 def default_manifest() -> dict[str, object]:
@@ -57,7 +56,7 @@ def render_ledger(manifest: dict[str, object]) -> str:
     lines = [
         "# Archive Ledger",
         "",
-        "**Purpose:** Track archived `styio-view` documentation provenance and lifecycle status; the machine-readable source of truth lives in [ARCHIVE-MANIFEST.json](./ARCHIVE-MANIFEST.json).",
+        "**Purpose:** Track archived `Vityo` documentation provenance and lifecycle status; the machine-readable source of truth lives in [ARCHIVE-MANIFEST.json](./ARCHIVE-MANIFEST.json).",
         "",
         f"**Last updated:** {manifest.get('last_updated', TODAY)}",
         "",
@@ -65,13 +64,13 @@ def render_ledger(manifest: dict[str, object]) -> str:
         "",
         f"- Archive root: `{manifest.get('archive_root', 'docs/archive')}`",
         f"- Rollup root: `{manifest.get('rollup_root', 'docs/rollups')}`",
-        f"- History keep window: `{manifest.get('keep_window', {}).get('history', 1)}` active daily file(s)",
+        f"- History keep window: `{manifest.get('keep_window', {}).get('history', 1)}` active history file(s)",
         "",
         "## Entries",
         "",
     ]
     if not entries:
-        lines.append("- No archived `styio-view` docs are recorded yet. When active history or other provenance files are archived, register them in `ARCHIVE-MANIFEST.json` and refresh this ledger.")
+        lines.append("- No archived `Vityo` docs are recorded yet. When active history or other provenance files are archived, register them in `ARCHIVE-MANIFEST.json` and refresh this ledger.")
     else:
         lines.extend(["| Source | Status | Archive Path |", "|--------|--------|--------------|"])
         for entry in entries:
@@ -103,16 +102,14 @@ def validate() -> int:
     for path in (HISTORY, ROLLUPS, ARCHIVE, ARCHIVE_HISTORY):
         if not path.exists():
             errors.append(f"missing lifecycle directory: {path.relative_to(ROOT).as_posix()}")
-    for path in (ROLLUPS / "CURRENT-STATE.md", ROLLUPS / "NEXT-STAGE-GAP-LEDGER.md", MANIFEST_PATH, LEDGER_PATH):
+    for path in (
+        ROLLUPS / "CURRENT-STATE.md",
+        ACTIVE_GAPS_PATH,
+        MANIFEST_PATH,
+        LEDGER_PATH,
+    ):
         if not path.exists():
             errors.append(f"missing lifecycle file: {path.relative_to(ROOT).as_posix()}")
-
-    for base in (HISTORY, ARCHIVE_HISTORY):
-        for path in base.glob("*.md"):
-            if path.name in {"README.md", "INDEX.md"}:
-                continue
-            if not DATE_FILE_RE.match(path.name):
-                errors.append(f"dated history file must use YYYY-MM-DD.md: {path.relative_to(ROOT).as_posix()}")
 
     if MANIFEST_PATH.exists():
         try:

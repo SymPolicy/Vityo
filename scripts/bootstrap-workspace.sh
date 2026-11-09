@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FLUTTER_HOME="${STYIO_VIEW_FLUTTER_HOME:-$HOME/develop/flutter}"
-FLUTTER_BIN="${STYIO_VIEW_FLUTTER_BIN:-$FLUTTER_HOME/bin/flutter}"
-PLATFORMS="${STYIO_VIEW_FLUTTER_PLATFORMS:-}"
+FLUTTER_HOME="${VITYO_FLUTTER_HOME:-$HOME/develop/flutter}"
+FLUTTER_BIN="${VITYO_FLUTTER_BIN:-$FLUTTER_HOME/bin/flutter}"
+PLATFORMS="${VITYO_FLUTTER_PLATFORMS:-}"
 SKIP_PLATFORM_BOOTSTRAP=0
 SKIP_NPM=0
 SKIP_FLUTTER_PUB=0
@@ -28,11 +28,11 @@ EOF
 }
 
 log() {
-  printf '[styio-view workspace] %s\n' "$*"
+  printf '[Vityo workspace] %s\n' "$*"
 }
 
 fail() {
-  printf '[styio-view workspace] %s\n' "$*" >&2
+  printf '[Vityo workspace] %s\n' "$*" >&2
   exit 1
 }
 
@@ -80,6 +80,17 @@ verify_platforms() {
   esac
 }
 
+restore_workspace_state() {
+  for state_file in .metadata pubspec.lock; do
+    if [[ -f "$WORKSPACE_SNAPSHOT_DIR/$state_file" ]]; then
+      cp "$WORKSPACE_SNAPSHOT_DIR/$state_file" "$ROOT/products/vityo_app/$state_file"
+    else
+      rm -f "$ROOT/products/vityo_app/$state_file"
+    fi
+  done
+  rm -rf "$WORKSPACE_SNAPSHOT_DIR"
+}
+
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -121,23 +132,42 @@ main() {
   verify_platforms
 
   if [[ ! -x "$FLUTTER_BIN" ]] && ! command -v flutter >/dev/null 2>&1; then
-    fail "flutter is not installed. Set STYIO_VIEW_FLUTTER_HOME or STYIO_VIEW_FLUTTER_BIN."
+    fail "flutter is not installed. Set VITYO_FLUTTER_HOME or VITYO_FLUTTER_BIN."
   fi
 
   if [[ ! -x "$FLUTTER_BIN" ]]; then
     FLUTTER_BIN="$(command -v flutter)"
   fi
 
+  # Flutter rewrites SDK metadata and dependency constraints during create/pub get.
+  # Preserve the input checkout, including any caller-owned edits, as on Windows.
+  WORKSPACE_SNAPSHOT_DIR="$(mktemp -d)"
+  for state_file in .metadata pubspec.lock; do
+    if [[ -f "$ROOT/products/vityo_app/$state_file" ]]; then
+      cp "$ROOT/products/vityo_app/$state_file" "$WORKSPACE_SNAPSHOT_DIR/$state_file"
+    fi
+  done
+  trap restore_workspace_state EXIT
+
   if [[ $SKIP_PLATFORM_BOOTSTRAP -eq 0 ]]; then
     log "generating Flutter runners for platforms: $PLATFORMS"
+    app_root="$ROOT/products/vityo_app"
+    default_widget_test="$app_root/test/widget_test.dart"
+    had_default_widget_test=0
+    if [[ -e "$default_widget_test" ]]; then
+      had_default_widget_test=1
+    fi
     (
-      cd "$ROOT/frontend/styio_view_app"
+      cd "$app_root"
       "$FLUTTER_BIN" create \
         --platforms="$PLATFORMS" \
-        --project-name=styio_view_app \
-        --org=io.styio.view \
+        --project-name=vityo_app \
+        --org=io.vityo.app \
         .
     )
+    if [[ $had_default_widget_test -eq 0 && -e "$default_widget_test" ]]; then
+      rm -f "$default_widget_test"
+    fi
   fi
 
   if [[ $SKIP_NPM -eq 0 ]]; then
@@ -148,7 +178,7 @@ main() {
   if [[ $SKIP_FLUTTER_PUB -eq 0 ]]; then
     log "installing Flutter package dependencies"
     (
-      cd "$ROOT/frontend/styio_view_app"
+      cd "$ROOT/products/vityo_app"
       "$FLUTTER_BIN" pub get
     )
   fi

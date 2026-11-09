@@ -26,9 +26,10 @@ COLLECTION_DIRS = [
     Path("docs/external"),
     Path("docs/external/for-pafio"),
     Path("docs/external/for-styio"),
+    Path("docs/governance"),
     Path("docs/history"),
-    Path("docs/milestones"),
-    Path("docs/plans"),
+    Path("docs/plan"),
+    Path("docs/release"),
     Path("docs/review"),
     Path("docs/rollups"),
     Path("docs/specs"),
@@ -37,10 +38,10 @@ COLLECTION_DIRS = [
 ]
 INDEX_META = {
     "docs": ("Docs Index", "Provide the generated inventory for `docs/`; directory boundaries and maintenance rules live in [README.md](./README.md)."),
-    "docs/adr": ("ADR Index", "Provide the generated inventory for `docs/adr/`; decision-record conventions live in [README.md](./README.md)."),
+    "docs/adr": ("ADR Index", "Provide the generated inventory for `docs/adr/`; standalone ADR and implemented-decision conventions live in [README.md](./README.md)."),
     "docs/archive": ("Archive Index", "Provide the generated inventory for `docs/archive/`; archive boundaries and lifecycle rules live in [README.md](./README.md)."),
-    "docs/archive/history": ("Archive History Index", "Provide the generated inventory for `docs/archive/history/`; archived daily provenance snapshots live in [README.md](./README.md)."),
-    "docs/audit": ("Audit Index", "Provide the generated inventory for `docs/audit/`; transient defect records live in ignored `docs/audit/defects/` and are enforced by external `audit` runs."),
+    "docs/archive/history": ("Archive History Index", "Provide the generated inventory for `docs/archive/history/`; archived topic provenance snapshots live in [README.md](./README.md)."),
+    "docs/audit": ("Audit Index", "Provide the generated inventory for `docs/audit/`; transient defect records live in ignored `docs/audit/defects/` and are enforced by the repository-local gates."),
     "docs/assets": ("Assets Index", "Provide the generated inventory for `docs/assets/`; reusable workflow assets and templates live in [README.md](./README.md)."),
     "docs/assets/workflow": ("Workflow Assets Index", "Provide the generated inventory for `docs/assets/workflow/`; test and workflow assets live in [README.md](./README.md)."),
     "docs/contracts": ("Contracts Index", "Provide the generated inventory for `docs/contracts/`; adapter-contract boundaries live in [README.md](./README.md)."),
@@ -48,9 +49,11 @@ INDEX_META = {
     "docs/external": ("External Docs Index", "Provide the generated inventory for `docs/external/`; upstream handoff boundaries live in [README.md](./README.md)."),
     "docs/external/for-pafio": ("For Pafio Index", "Provide the generated inventory for `docs/external/for-pafio/`; upstream `pafio` handoff boundaries live in [README.md](./README.md)."),
     "docs/external/for-styio": ("For Styio Index", "Provide the generated inventory for `docs/external/for-styio/`; upstream `styio` handoff boundaries live in [README.md](./README.md)."),
+    "docs/governance": ("Governance Index", "Provide the generated inventory for `docs/governance/`; compatibility, security, ownership, and release rules live in [README.md](./README.md)."),
     "docs/history": ("History Index", "Provide the generated inventory for `docs/history/`; recovery-note rules live in [README.md](./README.md)."),
-    "docs/milestones": ("Milestones Index", "Provide the generated inventory for `docs/milestones/`; freeze-batch rules live in [README.md](./README.md)."),
-    "docs/plans": ("Plans Index", "Provide the generated inventory for `docs/plans/`; plan boundaries and sequencing rules live in [README.md](./README.md)."),
+    "docs/plan": ("Planning Index", "Provide the generated inventory for `docs/plan/`; execution guidance and completed planning material live in [README.md](./README.md)."),
+
+    "docs/release": ("Release Index", "Provide the generated inventory for `docs/release/`; launch evidence, packaging, and platform release requirements live in [README.md](./README.md)."),
     "docs/review": ("Review Index", "Provide the generated inventory for `docs/review/`; open-conflict and unresolved-risk boundaries live in [README.md](./README.md)."),
     "docs/rollups": ("Rollups Index", "Provide the generated inventory for `docs/rollups/`; compressed active summaries live in [README.md](./README.md)."),
     "docs/specs": ("Specs Index", "Provide the generated inventory for `docs/specs/`; collaboration, repository, and documentation-rule boundaries live in [README.md](./README.md)."),
@@ -106,7 +109,7 @@ def rel_link(from_dir: Path, target: Path) -> str:
 
 
 def choose_dir_entry(path: Path) -> Path | None:
-    for name in ("INDEX.md", "README.md", "00-Milestone-Index.md"):
+    for name in ("INDEX.md", "README.md"):
         candidate = path / name
         if candidate.exists():
             return candidate
@@ -114,14 +117,6 @@ def choose_dir_entry(path: Path) -> Path | None:
 
 
 def child_sort_key(base: Path, path: Path) -> tuple[int, str]:
-    if base.as_posix() in {"docs/history", "docs/archive/history"} and path.is_file():
-        stem = path.stem
-        if re.match(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", stem):
-            return (1, f"{99999999 - int(stem.replace('-', '')):08d}")
-    if base.as_posix() == "docs/milestones" and path.is_dir():
-        name = path.name
-        if re.match(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$", name):
-            return (0, f"{99999999 - int(name.replace('-', '')):08d}")
     return (0 if path.is_dir() else 1, path.name.lower())
 
 
@@ -177,7 +172,9 @@ def render_index(base: Path) -> str:
     entries = build_entries(base)
     dir_entries = [entry for entry in entries if entry.is_dir]
     file_entries = [entry for entry in entries if not entry.is_dir]
-    updated = max((entry.last_updated for entry in entries), default=TODAY)
+    fallback_updated_source = base / "README.md"
+    fallback_updated = extract_last_updated(fallback_updated_source) if fallback_updated_source.exists() else TODAY
+    updated = max((entry.last_updated for entry in entries), default=fallback_updated)
 
     lines = [
         f"# {title}",

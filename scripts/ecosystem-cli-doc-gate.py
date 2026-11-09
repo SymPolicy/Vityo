@@ -13,6 +13,11 @@ CANONICAL_GATE = ROOT.parent / "styio-nightly" / "scripts" / "ecosystem-cli-doc-
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    non_blocking = False
+    if "--non-blocking" in args:
+        non_blocking = True
+        args = [a for a in args if a != "--non-blocking"]
+
     if not CANONICAL_GATE.is_file():
         payload = {
             "ok": True,
@@ -26,6 +31,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     proc = subprocess.run([sys.executable, str(CANONICAL_GATE), *args], cwd=ROOT)
+
+    if proc.returncode != 0 and non_blocking:
+        print(
+            "[WARN] ecosystem CLI doc gate reported issues but marked non-blocking;"
+            " these failures are tracked in sibling repos and do not block this PR",
+            file=sys.stderr,
+        )
+        return 0
+
     return proc.returncode
 
 

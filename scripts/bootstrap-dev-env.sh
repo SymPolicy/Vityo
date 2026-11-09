@@ -4,21 +4,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_USER="${SUDO_USER:-$USER}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
-DEBIAN_STANDARD_VERSION="${STYIO_TOOLCHAIN_DEBIAN_STANDARD_VERSION:-13}"
-LLVM_STANDARD_SERIES="${STYIO_TOOLCHAIN_LLVM_STANDARD_SERIES:-18.1.x}"
-CMAKE_STANDARD_VERSION="${STYIO_TOOLCHAIN_CMAKE_STANDARD_VERSION:-3.31.6}"
-PYTHON_STANDARD_VERSION="${STYIO_TOOLCHAIN_PYTHON_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.python-version")}"
-NODE_STANDARD_VERSION="${STYIO_TOOLCHAIN_NODE_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.nvmrc")}"
-FLUTTER_STANDARD_VERSION="${STYIO_TOOLCHAIN_FLUTTER_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.flutter-version")}"
-DART_STANDARD_VERSION="${STYIO_TOOLCHAIN_DART_STANDARD_VERSION:-3.11.5}"
-CHROMIUM_STANDARD_VERSION="${STYIO_TOOLCHAIN_CHROMIUM_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.chromium-version")}"
-ANDROID_CMDLINE_TOOLS_VERSION="${STYIO_VIEW_ANDROID_CMDLINE_TOOLS_VERSION:-14742923}"
-ANDROID_PROFILE_FILE="${STYIO_VIEW_ANDROID_PROFILE_FILE:-$ROOT/toolchain/android-sdk-profiles.csv}"
-ANDROID_PROFILES="${STYIO_VIEW_ANDROID_PROFILES:-android-35,android-36}"
-ANDROID_DEFAULT_PROFILE="${STYIO_VIEW_ANDROID_DEFAULT_PROFILE:-android-36}"
-FLUTTER_HOME="${STYIO_VIEW_FLUTTER_HOME:-$TARGET_HOME/develop/flutter}"
-ANDROID_SDK_ROOT="${STYIO_VIEW_ANDROID_SDK_ROOT:-$TARGET_HOME/Android/Sdk}"
-NODE_INSTALL_ROOT="${STYIO_VIEW_NODE_INSTALL_ROOT:-/usr/local/lib/nodejs}"
+DEBIAN_STANDARD_VERSION="${VITYO_TOOLCHAIN_DEBIAN_STANDARD_VERSION:-13}"
+LLVM_STANDARD_SERIES="${VITYO_TOOLCHAIN_LLVM_STANDARD_SERIES:-18.1.x}"
+CMAKE_STANDARD_VERSION="${VITYO_TOOLCHAIN_CMAKE_STANDARD_VERSION:-3.31.6}"
+PYTHON_STANDARD_VERSION="${VITYO_TOOLCHAIN_PYTHON_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.python-version")}"
+NODE_STANDARD_VERSION="${VITYO_TOOLCHAIN_NODE_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.nvmrc")}"
+FLUTTER_STANDARD_VERSION="${VITYO_TOOLCHAIN_FLUTTER_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.flutter-version")}"
+DART_STANDARD_VERSION="${VITYO_TOOLCHAIN_DART_STANDARD_VERSION:-3.11.5}"
+CHROMIUM_STANDARD_VERSION="${VITYO_TOOLCHAIN_CHROMIUM_STANDARD_VERSION:-$(tr -d '[:space:]' < "$ROOT/.chromium-version")}"
+ANDROID_CMDLINE_TOOLS_VERSION="${VITYO_ANDROID_CMDLINE_TOOLS_VERSION:-14742923}"
+ANDROID_PROFILE_FILE="${VITYO_ANDROID_PROFILE_FILE:-$ROOT/toolchain/android-sdk-profiles.csv}"
+ANDROID_PROFILES="${VITYO_ANDROID_PROFILES:-android-35,android-36}"
+ANDROID_DEFAULT_PROFILE="${VITYO_ANDROID_DEFAULT_PROFILE:-android-36}"
+FLUTTER_HOME="${VITYO_FLUTTER_HOME:-$TARGET_HOME/develop/flutter}"
+ANDROID_SDK_ROOT="${VITYO_ANDROID_SDK_ROOT:-$TARGET_HOME/Android/Sdk}"
+NODE_INSTALL_ROOT="${VITYO_NODE_INSTALL_ROOT:-/usr/local/lib/nodejs}"
 WITH_ANDROID=0
 SKIP_WORKSPACE_BOOTSTRAP=0
 
@@ -27,7 +27,7 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Install the Debian/Ubuntu packages and SDKs required to build, test, and run
-styio-view on a fresh Linux host, container, or VM.
+Vityo on a fresh Linux host, container, or VM.
 
 Options:
   --with-android            Install the Linux + Android combo toolchain
@@ -39,15 +39,15 @@ Options:
   -h, --help                Show this help
 
 Optional environment:
-  STYIO_VIEW_FLUTTER_HOME        Flutter checkout location
+  VITYO_FLUTTER_HOME        Flutter checkout location
                                  Default: $FLUTTER_HOME
-  STYIO_VIEW_ANDROID_SDK_ROOT    Android SDK root
+  VITYO_ANDROID_SDK_ROOT    Android SDK root
                                  Default: $ANDROID_SDK_ROOT
-  STYIO_VIEW_ANDROID_PROFILE_FILE Android SDK profile csv
+  VITYO_ANDROID_PROFILE_FILE Android SDK profile csv
                                  Default: $ANDROID_PROFILE_FILE
-  STYIO_VIEW_ANDROID_PROFILES    Android SDK profile set
+  VITYO_ANDROID_PROFILES    Android SDK profile set
                                  Default: $ANDROID_PROFILES
-  STYIO_VIEW_ANDROID_DEFAULT_PROFILE
+  VITYO_ANDROID_DEFAULT_PROFILE
                                  Default profile for shell exports
                                  Default: $ANDROID_DEFAULT_PROFILE
 
@@ -63,11 +63,11 @@ EOF
 }
 
 log() {
-  printf '[styio-view linux env] %s\n' "$*"
+  printf '[Vityo linux env] %s\n' "$*"
 }
 
 fail() {
-  printf '[styio-view linux env] %s\n' "$*" >&2
+  printf '[Vityo linux env] %s\n' "$*" >&2
   exit 1
 }
 
@@ -121,6 +121,7 @@ install_system_packages() {
     git
     libblkid-dev
     libgtk-3-dev
+    libsecret-1-dev
     liblzma-dev
     mesa-utils
     ninja-build
@@ -256,12 +257,12 @@ configure_android_sdk() {
   "$flutter_bin" config --android-sdk "$ANDROID_SDK_ROOT" --enable-web --enable-linux-desktop --enable-android
 
   log "installing Android SDK profiles: $ANDROID_PROFILES"
-  STYIO_VIEW_ANDROID_PROFILE_FILE="$ANDROID_PROFILE_FILE" \
-  STYIO_VIEW_ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
+  VITYO_ANDROID_PROFILE_FILE="$ANDROID_PROFILE_FILE" \
+  VITYO_ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
     "$ROOT/scripts/android-sdk-profile.sh" install --profiles "$ANDROID_PROFILES"
 
-  STYIO_VIEW_ANDROID_PROFILE_FILE="$ANDROID_PROFILE_FILE" \
-  STYIO_VIEW_ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
+  VITYO_ANDROID_PROFILE_FILE="$ANDROID_PROFILE_FILE" \
+  VITYO_ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
     "$ROOT/scripts/android-sdk-profile.sh" env "$ANDROID_DEFAULT_PROFILE" >/dev/null
 }
 
@@ -294,7 +295,7 @@ print_summary() {
 
   cat <<EOF
 
-styio-view Linux bootstrap complete.
+Vityo Linux bootstrap complete.
 
 Profile:
   Host combo:     linux$( [[ $WITH_ANDROID -eq 1 ]] && printf '+android' )
@@ -312,8 +313,8 @@ Suggested shell exports:
   export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
   export ANDROID_HOME="\$ANDROID_SDK_ROOT"
   export JAVA_HOME=/usr/lib/jvm/default-java
-  export STYIO_CHROME_PATH="${chrome_bin:-/usr/bin/chromium}"
-  export CHROME_EXECUTABLE="\$STYIO_CHROME_PATH"
+  export VITYO_CHROME_PATH="${chrome_bin:-/usr/bin/chromium}"
+  export CHROME_EXECUTABLE="\$VITYO_CHROME_PATH"
   export PATH="\$FLUTTER_HOME/bin:\$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:\$ANDROID_SDK_ROOT/platform-tools:\$PATH"
 
 Typical next steps:
@@ -321,9 +322,9 @@ Typical next steps:
   ./scripts/android-sdk-profile.sh list
   eval "\$(./scripts/android-sdk-profile.sh env $ANDROID_DEFAULT_PROFILE)"
   ./scripts/android-sdk-profile.sh build --profiles $ANDROID_PROFILES --parallel --artifact apk --mode debug
-  cd "$ROOT/frontend/styio_view_app" && "\$FLUTTER_HOME/bin/flutter" analyze
-  cd "$ROOT/frontend/styio_view_app" && "\$FLUTTER_HOME/bin/flutter" test
-  cd "$ROOT/prototype" && STYIO_EDITOR_URL=http://127.0.0.1:4180/editor.html npm run selftest:editor
+  cd "$ROOT/products/vityo_app" && "\$FLUTTER_HOME/bin/flutter" analyze
+  cd "$ROOT/products/vityo_app" && "\$FLUTTER_HOME/bin/flutter" test
+  cd "$ROOT/prototype" && VITYO_EDITOR_URL=http://127.0.0.1:4180/editor npm run selftest:editor
 EOF
 }
 
