@@ -1,0 +1,155 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../view_render/theme/theme.dart';
+import '../view_ide/environment/configuration/platform_secure_credential_storage.dart';
+import '../view_ide/environment/configuration/vityo_theme_override.dart';
+import '../view_render/shell/shell_model.dart';
+import '../view_render/shell/shell_scope.dart';
+import '../view_render/shell/vityo_shell_scaffold.dart';
+import 'app_bootstrap.dart';
+
+class VityoApp extends StatefulWidget {
+  const VityoApp({super.key, required this.bootstrap, this.initialPath});
+
+  final AppBootstrap bootstrap;
+  final String? initialPath;
+
+  @override
+  State<VityoApp> createState() => _VityoAppState();
+}
+
+class _VityoAppState extends State<VityoApp> {
+  late final ShellModel _shellModel;
+
+  @override
+  void initState() {
+    super.initState();
+    _shellModel = ShellModel(
+      platformTarget: widget.bootstrap.platformTarget,
+      supplementalAdapterCapabilities:
+          widget.bootstrap.supplementalAdapterCapabilities,
+      projectGraphAdapter: widget.bootstrap.projectGraphAdapter,
+      workspaceController: widget.bootstrap.workspaceController,
+      workspaceDocumentStore: widget.bootstrap.workspaceDocumentStore,
+      moduleRegistry: widget.bootstrap.moduleRegistry,
+      nativeModuleLoader: widget.bootstrap.nativeModuleLoader,
+      extensionActivationSession:
+          widget.bootstrap.extensionStartupPlan?.activationSession,
+      extensionHostSupervisorSnapshot:
+          widget.bootstrap.extensionStartupPlan?.supervisorSnapshot,
+      extensionHostLaunchResults:
+          widget.bootstrap.extensionStartupPlan?.launchResults ?? const [],
+      extensionHostTelemetryEvents:
+          widget.bootstrap.extensionStartupPlan?.telemetryEvents ?? const [],
+      extensionMarketplaceRuntime: widget.bootstrap.extensionMarketplaceRuntime,
+      installedExtensionRegistry:
+          widget.bootstrap.extensionStartupPlan?.manifestRegistry,
+      editorController: widget.bootstrap.editorController,
+      executionAdapter: widget.bootstrap.executionAdapter,
+      executionAdapterFactory: widget.bootstrap.executionAdapterFactory,
+      runtimeEventAdapter: widget.bootstrap.runtimeEventAdapter,
+      dependencySourceAdapter: widget.bootstrap.dependencySourceAdapter,
+      deploymentAdapter: widget.bootstrap.deploymentAdapter,
+      terminalRuntimeRegistry: widget.bootstrap.terminalRuntimeRegistry,
+      agentClientRegistry: widget.bootstrap.agentClientRegistry,
+      agentCollaboration: widget.bootstrap.agentCollaboration,
+      vityodClient: widget.bootstrap.vityodClient,
+      debugAdapterLauncher: widget.bootstrap.debugAdapterLauncher,
+      debugBreakpointStore: widget.bootstrap.debugBreakpointStore,
+      debugLaunchConfigurationStore:
+          widget.bootstrap.debugLaunchConfigurationStore,
+      initialDebugLaunchProfiles: widget.bootstrap.debugLaunchProfiles,
+      workspaceTextSearchProvider: widget.bootstrap.workspaceTextSearchProvider,
+      platformManagers: widget.bootstrap.platformManagers,
+      credentialStorageSettings: widget.bootstrap.credentialStorage == null
+          ? null
+          : CredentialStorageSettingsSurface.fromBootstrap(
+              widget.bootstrap.credentialStorage!,
+            ),
+      hostedControlPlaneClient: widget.bootstrap.hostedControlPlaneClient,
+      runtimeOutputBuffer: widget.bootstrap.runtimeOutputBuffer,
+      refreshActiveLanguageService:
+          widget.bootstrap.refreshActiveLanguageService,
+      styioServiceSubscriptionController:
+          widget.bootstrap.styioServiceSubscriptionController,
+      toolchainManager: widget.bootstrap.toolchainManager,
+      languageServiceStatus: widget.bootstrap.languageServiceStatus,
+      toolchainStatusReport: widget.bootstrap.toolchainStatusReport,
+      clangCppVersionPreference: widget.bootstrap.clangCppVersionPreference,
+      themeOverrideStore: widget.bootstrap.themeOverrideStore,
+      commandPalettePreferencesStore:
+          widget.bootstrap.commandPalettePreferencesStore,
+      workspaceFileExplorerStateStore:
+          widget.bootstrap.workspaceFileExplorerStateStore,
+      shellLayoutPreferencesStore: widget.bootstrap.shellLayoutPreferencesStore,
+      workspaceDiagnosticsController:
+          widget.bootstrap.workspaceDiagnosticsController,
+      testingSessionController: widget.bootstrap.testingSessionController,
+      observableGraphController: widget.bootstrap.observableGraphController,
+      sourceControlStatusController:
+          widget.bootstrap.sourceControlStatusController,
+      projectLanguageService: widget.bootstrap.projectLanguageService,
+      diagnosticsPanelStateStore: widget.bootstrap.diagnosticsPanelStateStore,
+    );
+    unawaited(_shellModel.loadThemeOverride());
+    unawaited(
+      _shellModel.loadCommandPalettePreferences(
+        workspaceId: widget.bootstrap.workspaceController.activeProject.id,
+      ),
+    );
+    unawaited(_shellModel.loadExtensionMarketplace());
+    unawaited(_shellModel.loadShellLayoutPreferences());
+    unawaited(_shellModel.loadDiagnosticsPanelState());
+  }
+
+  @override
+  void dispose() {
+    _shellModel.dispose();
+    widget.bootstrap.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _shellModel,
+      builder: (context, _) {
+        return ShellScope(
+          model: _shellModel,
+          child: MaterialApp(
+            title: 'Vityo',
+            debugShowCheckedModeBanner: false,
+            theme: VityoTheme.resolve(
+              preset:
+                  _shellModel.themeOverride.presetValue ??
+                  VityoThemePreset.obsidian,
+              overrides: _shellModel.themeOverride,
+            ),
+            initialRoute: _editorInitialRoute(widget.initialPath),
+            onGenerateInitialRoutes: (initialRoute) => <Route<dynamic>>[
+              _editorRoute(initialRoute),
+            ],
+            onGenerateRoute: (settings) => _editorRoute(settings.name),
+            onUnknownRoute: (settings) => _editorRoute(settings.name),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _editorInitialRoute(String? path) {
+  if (path == null || path.trim().isEmpty) {
+    return '/editor';
+  }
+  return '/editor';
+}
+
+Route<dynamic> _editorRoute(String? _) {
+  return MaterialPageRoute<void>(
+    settings: const RouteSettings(name: '/editor'),
+    builder: (_) => const VityoShellScaffold(),
+  );
+}
