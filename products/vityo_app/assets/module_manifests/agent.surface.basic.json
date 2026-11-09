@@ -1,0 +1,43 @@
+{
+  "moduleId": "agent.surface.basic",
+  "displayName": "Agent Workbench",
+  "version": "0.2.0",
+  "kind": "optional",
+  "slot": "agentSurface",
+  "description": "Protocol-only Agent Workbench host for versioned Agent Client collaboration projections.",
+  "enabledByDefault": true,
+  "entrypoint": "lib/src/presentation/agent_workbench/task_center.dart",
+  "distributionPolicyRef": "cross-platform-ui",
+  "extension": {
+    "activationEvents": [
+      "onStartup"
+    ],
+    "metadata": {
+      "isolationMode": "in-process"
+    },
+    "contributions": [
+      {
+        "kind": "agent",
+        "id": "agent-workbench-surface",
+        "target": "agent.workbench",
+        "title": "Agent Workbench Surface",
+        "metadata": {
+          "description": "Present immutable Agent Client collaboration projections and IDE workspace transaction review.",
+          "permissionMode": "never",
+          "capabilities": [
+            "agent.client",
+            "agent.workbench",
+            "workspace.transactions"
+          ]
+        }
+      }
+    ]
+  },
+  "capabilityFlags": {
+    "agentPanel": true,
+    "providerAdapters": false,
+    "profileInjection": false,
+    "protocolClient": true,
+    "collaborationProjection": true
+  }
+}
