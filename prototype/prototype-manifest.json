@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "last_updated": "2026-07-26",
+  "canonical_entry": null,
+  "entries": [
+    {
+      "path": "editor.html",
+      "status": "draft",
+      "owner": "Shell / Editor",
+      "validation": "npm run selftest:editor (archived gate, kept green for reference)",
+      "notes": "Draft archive of the former focused Web Editor surface. No longer maintained; the Flutter app (products/vityo_app) is the default client."
+    },
+    {
+      "path": "index.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Design gallery index for standalone style experiment previews."
+    },
+    {
+      "path": "vityo-bauhaus.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-cinema.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-glace.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-hyper-vis.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-lumina.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-monolith.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-obsidian.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-parchment.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-pearl.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-synapse-trackpad.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-synapse.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-xenon.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    },
+    {
+      "path": "vityo-zenith.html",
+      "status": "style-experiment",
+      "owner": "Theme / UX",
+      "validation": "manual visual review",
+      "notes": "Standalone visual direction sample."
+    }
+  ]
+}

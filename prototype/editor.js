@@ -66,6 +66,11 @@ import {
   installGridLayoutConfigDebugApi,
 } from "./editor-modules/grid-style/layout-config-store.js";
 import {
+  appendChatMessage,
+  bindChatDockEvents,
+  readChatInput,
+} from "./editor-modules/grid-style/chat-dock.js";
+import {
   applyVisualTokenOverrides,
   buildVisualTokenConfigObject,
   hasVisualTokenOverrides,
@@ -312,6 +317,8 @@ let workspaceLoadedFiles = initialRuntimeState.workspaceLoadedFiles;
 let saveInFlight = initialRuntimeState.saveInFlight;
 let latestAnalysis = initialRuntimeState.latestAnalysis;
 let sidebarOpen = initialRuntimeState.sidebarOpen;
+let projectSidebarOpen = initialRuntimeState.projectSidebarOpen;
+let chatDockOpen = initialRuntimeState.chatDockOpen;
 let activeDrawerTab = initialRuntimeState.activeDrawerTab;
 let linkedSurfaceActiveTab = initialRuntimeState.linkedSurfaceActiveTab;
 let editorModeLinkedToTheme = initialRuntimeState.editorModeLinkedToTheme;
@@ -781,8 +788,8 @@ function sidebarToggleSvg(isOpen) {
 }
 const translations = {
   zhCn: {
-    documentTitle: "Styio 编辑器",
-    appTitle: "styio",
+    documentTitle: "Vityo 编辑器",
+    appTitle: "Vityo",
     openSidebar: "打开侧边栏",
     closeSidebar: "关闭侧边栏",
     fileTree: "文件树",
@@ -847,7 +854,7 @@ const translations = {
     configParseFailed: "配置解析失败",
     configImported: "配置已导入",
     configSaved: "配置已保存",
-    themeConfigMessage: "编辑一份参考 VS Code 结构的 JSONC 配置。",
+    themeConfigMessage: "编辑一份 JSONC 格式的主题配置。",
     noFilesInWorkspace: "当前工作区还没有文件。",
     previewFile: "预览文件",
     dirty: "未保存",
@@ -879,10 +886,20 @@ const translations = {
     glyphsLoading: "符号：加载中",
     indentLoading: "缩进：加载中",
     unitLoading: "单元：加载中",
+    explorer: "项目文件",
+    expandProjectSidebar: "展开项目侧栏",
+    collapseProjectSidebar: "收起项目侧栏",
+    assistant: "助手",
+    chatInputPlaceholder: "描述你想要的改动…",
+    sendMessage: "发送",
+    expandChatDock: "展开对话面板",
+    collapseChatDock: "收起对话面板",
+    assistantWelcome: "你好，我是 Vityo 助手。AI 后端尚未接入，目前先把想法和改动需求记录在这里。",
+    assistantPlaceholderReply: "当前原型尚未接入 AI 后端，这是一条占位回复。",
   },
   en: {
-    documentTitle: "Styio Editor",
-    appTitle: "styio",
+    documentTitle: "Vityo Editor",
+    appTitle: "Vityo",
     openSidebar: "Open sidebar",
     closeSidebar: "Close sidebar",
     fileTree: "File tree",
@@ -948,7 +965,7 @@ const translations = {
     configParseFailed: "Config parse failed",
     configImported: "Config imported",
     configSaved: "Config saved",
-    themeConfigMessage: "Edit a JSONC config inspired by VS Code settings structure.",
+    themeConfigMessage: "Edit a JSONC theme configuration.",
     noFilesInWorkspace: "No files in this workspace yet.",
     previewFile: "Preview file",
     dirty: "dirty",
@@ -980,6 +997,16 @@ const translations = {
     glyphsLoading: "glyphs: loading",
     indentLoading: "indent: loading",
     unitLoading: "unit: loading",
+    explorer: "Explorer",
+    expandProjectSidebar: "Show project sidebar",
+    collapseProjectSidebar: "Hide project sidebar",
+    assistant: "Assistant",
+    chatInputPlaceholder: "Describe the change you want…",
+    sendMessage: "Send",
+    expandChatDock: "Expand chat panel",
+    collapseChatDock: "Collapse chat panel",
+    assistantWelcome: "Hi, I'm the Vityo assistant. The AI backend isn't connected yet — draft your requests here for now.",
+    assistantPlaceholderReply: "This prototype isn't connected to an AI backend yet; this is a placeholder reply.",
   },
 };
 
@@ -1044,6 +1071,36 @@ function applyLanguageUi() {
   quickCreateFileButton.setAttribute("title", t("createFile"));
   workspaceMoreButton.setAttribute("aria-label", t("moreWorkspaceActions"));
   workspaceMoreButton.setAttribute("title", t("moreWorkspaceActions"));
+
+  const gridRefs = styleShellBridge.gridRefs;
+  if (gridRefs.projectSidebarTitle) {
+    gridRefs.projectSidebarTitle.textContent = t("explorer");
+  }
+  if (gridRefs.chatDockTitle) {
+    gridRefs.chatDockTitle.textContent = t("assistant");
+  }
+  if (gridRefs.chatInput) {
+    gridRefs.chatInput.setAttribute("placeholder", t("chatInputPlaceholder"));
+    gridRefs.chatInput.setAttribute("aria-label", t("chatInputPlaceholder"));
+  }
+  if (gridRefs.chatSendButton) {
+    gridRefs.chatSendButton.setAttribute("aria-label", t("sendMessage"));
+    gridRefs.chatSendButton.setAttribute("title", t("sendMessage"));
+  }
+  if (gridRefs.chatDockCollapseButton) {
+    gridRefs.chatDockCollapseButton.setAttribute("aria-label", t("collapseChatDock"));
+    gridRefs.chatDockCollapseButton.setAttribute("title", t("collapseChatDock"));
+  }
+  if (gridRefs.toggleProjectSidebarButton) {
+    const projectSidebarLabel = t(projectSidebarOpen ? "collapseProjectSidebar" : "expandProjectSidebar");
+    gridRefs.toggleProjectSidebarButton.setAttribute("aria-label", projectSidebarLabel);
+    gridRefs.toggleProjectSidebarButton.setAttribute("title", projectSidebarLabel);
+  }
+  if (gridRefs.toggleChatDockButton) {
+    const chatDockLabel = t(chatDockOpen ? "collapseChatDock" : "expandChatDock");
+    gridRefs.toggleChatDockButton.setAttribute("aria-label", chatDockLabel);
+    gridRefs.toggleChatDockButton.setAttribute("title", chatDockLabel);
+  }
 
   languageTitle.textContent = t("language");
   if (styleTitle) {
@@ -1375,35 +1432,35 @@ function parseCustomPaletteConfig(rawText) {
   const workbench = parsed["workbench.colorCustomizations"];
   const editorColors = parsed["editor.tokenColorCustomizations"];
   const editorConfig = parsed.editor;
-  const styioView = parsed.styioView;
+  const vityoView = parsed.vityoView;
 
   const config = {
     name: typeof parsed.name === "string" ? parsed.name.trim() : "",
     styleKey:
-      findPresetByKeyOrLabel(uiStyleOptionsList, normalizeLegacyPresetValue(styioView?.style, legacyUiStyleKeyMap))
+      findPresetByKeyOrLabel(uiStyleOptionsList, normalizeLegacyPresetValue(vityoView?.style, legacyUiStyleKeyMap))
         ?.key ?? null,
-    languageKey: findPresetByKeyOrLabel(languageOptionsList, styioView?.language)?.key ?? null,
-    themeMode: ["dark", "light"].includes(styioView?.themeMode) ? styioView.themeMode : null,
-    editorMode: ["dark", "light"].includes(styioView?.editorMode) ? styioView.editorMode : null,
+    languageKey: findPresetByKeyOrLabel(languageOptionsList, vityoView?.language)?.key ?? null,
+    themeMode: ["dark", "light"].includes(vityoView?.themeMode) ? vityoView.themeMode : null,
+    editorMode: ["dark", "light"].includes(vityoView?.editorMode) ? vityoView.editorMode : null,
     themePaletteKey:
-      findPresetByKeyOrLabel(themePalettePresets, workbench?.["styio.themePalette"])?.key ?? null,
+      findPresetByKeyOrLabel(themePalettePresets, workbench?.["vityo.themePalette"])?.key ?? null,
     themeColorKey:
       findPresetByKeyOrLabel(
         themeColorPresets,
-        normalizeLegacyPresetValue(workbench?.["styio.themeColor"], legacyThemeColorKeyMap),
+        normalizeLegacyPresetValue(workbench?.["vityo.themeColor"], legacyThemeColorKeyMap),
       )?.key ?? null,
     themeTextKey:
-      findPresetByKeyOrLabel(themeTextPresets, workbench?.["styio.themeText"])?.key ?? null,
+      findPresetByKeyOrLabel(themeTextPresets, workbench?.["vityo.themeText"])?.key ?? null,
     themeBackgroundKey:
-      findPresetByKeyOrLabel(themeBackgroundPresets, workbench?.["styio.background"])?.key ?? null,
+      findPresetByKeyOrLabel(themeBackgroundPresets, workbench?.["vityo.background"])?.key ?? null,
     themeLineKey:
-      findPresetByKeyOrLabel(themeLinePresets, workbench?.["styio.themeLines"])?.key ?? null,
+      findPresetByKeyOrLabel(themeLinePresets, workbench?.["vityo.themeLines"])?.key ?? null,
     interfaceFontKey:
       findPresetByKeyOrLabel(
         interfaceFontOptionsList,
-        normalizeLegacyPresetValue(workbench?.["styio.interfaceFont"], legacyInterfaceFontKeyMap),
+        normalizeLegacyPresetValue(workbench?.["vityo.interfaceFont"], legacyInterfaceFontKeyMap),
       )?.key ?? null,
-    interfaceSizeKey: normalizeInterfaceSizeFromConfig(workbench?.["styio.interfaceSize"]),
+    interfaceSizeKey: normalizeInterfaceSizeFromConfig(workbench?.["vityo.interfaceSize"]),
     editorFontKey:
       findPresetByKeyOrLabel(
         editorFontOptionsList,
@@ -1412,34 +1469,34 @@ function parseCustomPaletteConfig(rawText) {
     editorFontSizeKey: normalizeEditorFontSizeFromConfig(editorConfig?.fontSize),
     tabSize: [2, 4].includes(editorConfig?.tabSize) ? editorConfig.tabSize : null,
     glyphComposition:
-      typeof styioView?.glyphComposition === "boolean" ? styioView.glyphComposition : null,
+      typeof vityoView?.glyphComposition === "boolean" ? vityoView.glyphComposition : null,
     editorPaletteKey:
       findPresetByKeyOrLabel(
         glyphPaletteOptions,
-        normalizeLegacyPresetValue(editorColors?.["styio.palette"], legacyDefaultGlyphPaletteKeyMap),
+        normalizeLegacyPresetValue(editorColors?.["vityo.palette"], legacyDefaultGlyphPaletteKeyMap),
       )?.key ?? null,
     editorBackgroundKey:
-      findPresetByKeyOrLabel(editorBackgroundPresets, editorColors?.["styio.editorBackground"])?.key ??
+      findPresetByKeyOrLabel(editorBackgroundPresets, editorColors?.["vityo.editorBackground"])?.key ??
       null,
     textColorKey:
-      findPresetByKeyOrLabel(editorTextColorPresets, editorColors?.["styio.textColor"])?.key ?? null,
+      findPresetByKeyOrLabel(editorTextColorPresets, editorColors?.["vityo.textColor"])?.key ?? null,
     textHighlightKey:
       findPresetByKeyOrLabel(
         editorTextHighlightPresets,
-        normalizeLegacyPresetValue(editorColors?.["styio.textHighlight"], legacyEditorTextHighlightKeyMap),
+        normalizeLegacyPresetValue(editorColors?.["vityo.textHighlight"], legacyEditorTextHighlightKeyMap),
       )?.key ?? null,
     blockSurfaceKey:
-      findPresetByKeyOrLabel(blockSurfacePresets, editorColors?.["styio.block"])?.key ?? null,
+      findPresetByKeyOrLabel(blockSurfacePresets, editorColors?.["vityo.block"])?.key ?? null,
     lineHighlightKey:
-      findPresetByKeyOrLabel(lineHighlightPresets, editorColors?.["styio.line"])?.key ?? null,
+      findPresetByKeyOrLabel(lineHighlightPresets, editorColors?.["vityo.line"])?.key ?? null,
     selectionHighlightKey:
-      findPresetByKeyOrLabel(selectionHighlightPresets, editorColors?.["styio.selection"])?.key ?? null,
+      findPresetByKeyOrLabel(selectionHighlightPresets, editorColors?.["vityo.selection"])?.key ?? null,
     symbolColors: {},
-    visualTokens: normalizeVisualTokenOverrides(styioView?.visualTokens),
-    replaceVisualTokens: Object.prototype.hasOwnProperty.call(styioView ?? {}, "visualTokens"),
+    visualTokens: normalizeVisualTokenOverrides(vityoView?.visualTokens),
+    replaceVisualTokens: Object.prototype.hasOwnProperty.call(vityoView ?? {}, "visualTokens"),
   };
 
-  const symbolColors = editorColors?.["styio.symbolColors"];
+  const symbolColors = editorColors?.["vityo.symbolColors"];
   if (symbolColors && typeof symbolColors === "object" && !Array.isArray(symbolColors)) {
     Object.entries(symbolColors).forEach(([key, value]) => {
       const spec = glyphSpecFromConfigKey(key);
@@ -1470,20 +1527,20 @@ function buildCustomPaletteConfigObject() {
     $schema: customPaletteConfigSchema,
     name: "Custom Palette",
     "workbench.colorCustomizations": {
-      "styio.themePalette": currentThemePaletteSelectionKey(),
-      "styio.themeColor": activeThemeColorKey,
-      "styio.themeText": activeThemeTextKey,
-      "styio.background": activeThemeBackgroundKey,
-      "styio.themeLines": activeThemeLineKey,
-      "styio.interfaceFont": activeInterfaceFontKey,
-      "styio.interfaceSize": currentInterfaceSize.size,
+      "vityo.themePalette": currentThemePaletteSelectionKey(),
+      "vityo.themeColor": activeThemeColorKey,
+      "vityo.themeText": activeThemeTextKey,
+      "vityo.background": activeThemeBackgroundKey,
+      "vityo.themeLines": activeThemeLineKey,
+      "vityo.interfaceFont": activeInterfaceFontKey,
+      "vityo.interfaceSize": currentInterfaceSize.size,
     },
     editor: {
       tabSize: indentSize,
       fontFamily: activeEditorFontKey,
       fontSize: Number.isFinite(editorFontSizeValue) ? editorFontSizeValue : currentEditorFontSize.size,
     },
-    styioView: {
+    vityoView: {
       style: activeUiStyleKey,
       language: activeLanguageKey,
       glyphComposition: glyphsOn,
@@ -1491,14 +1548,14 @@ function buildCustomPaletteConfigObject() {
       editorMode,
     },
     "editor.tokenColorCustomizations": {
-      "styio.palette": currentEditorPaletteSelectionKey(),
-      "styio.editorBackground": activeEditorBackgroundKey,
-      "styio.textColor": activeEditorTextColorKey,
-      "styio.textHighlight": activeEditorTextHighlightKey,
-      "styio.block": activeBlockSurfaceKey,
-      "styio.line": activeLineHighlightKey,
-      "styio.selection": activeSelectionHighlightKey,
-      "styio.symbolColors": symbolColors,
+      "vityo.palette": currentEditorPaletteSelectionKey(),
+      "vityo.editorBackground": activeEditorBackgroundKey,
+      "vityo.textColor": activeEditorTextColorKey,
+      "vityo.textHighlight": activeEditorTextHighlightKey,
+      "vityo.block": activeBlockSurfaceKey,
+      "vityo.line": activeLineHighlightKey,
+      "vityo.selection": activeSelectionHighlightKey,
+      "vityo.symbolColors": symbolColors,
     },
   };
 }
@@ -1506,7 +1563,7 @@ function buildCustomPaletteConfigObject() {
 function buildCustomPaletteConfigText() {
   const config = buildCustomPaletteConfigObject();
   if (hasVisualTokenOverrides(visualTokenOverrides)) {
-    config.styioView.visualTokens = buildVisualTokenConfigObject(visualTokenOverrides);
+    config.vityoView.visualTokens = buildVisualTokenConfigObject(visualTokenOverrides);
   }
   return JSON.stringify(config, null, 2);
 }
@@ -3252,14 +3309,61 @@ function syncSidebar() {
     t,
   });
 
+  const gridShellActive = activeUiStyleKey === "grid";
   drawerTabs.forEach((button) => {
     const active = button.dataset.drawerTab === activeDrawerTab;
     button.classList.toggle("is-active", active);
     const panel = document.getElementById(`drawerPanel${button.dataset.drawerTab.charAt(0).toUpperCase()}${button.dataset.drawerTab.slice(1)}`);
-    panel.classList.toggle("is-active", active);
+    panel.classList.toggle("is-active", gridShellActive ? true : active);
   });
 
   scheduleLayoutRender();
+}
+
+function syncProjectSidebar() {
+  document.body.classList.toggle("project-sidebar-open", projectSidebarOpen);
+  const toggle = styleShellBridge.gridRefs.toggleProjectSidebarButton;
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", String(projectSidebarOpen));
+    const label = t(projectSidebarOpen ? "collapseProjectSidebar" : "expandProjectSidebar");
+    toggle.setAttribute("aria-label", label);
+    toggle.setAttribute("title", label);
+  }
+  scheduleLayoutRender();
+}
+
+function syncChatDock() {
+  document.body.classList.toggle("chat-dock-open", chatDockOpen);
+  const toggle = styleShellBridge.gridRefs.toggleChatDockButton;
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", String(chatDockOpen));
+    const label = t(chatDockOpen ? "collapseChatDock" : "expandChatDock");
+    toggle.setAttribute("aria-label", label);
+    toggle.setAttribute("title", label);
+  }
+  scheduleLayoutRender();
+}
+
+function handleChatDockSend() {
+  const gridRefs = styleShellBridge.gridRefs;
+  const text = readChatInput(gridRefs.chatInput);
+  if (!text) {
+    return;
+  }
+
+  appendChatMessage(gridRefs.chatMessages, "user", text);
+  window.setTimeout(() => {
+    appendChatMessage(gridRefs.chatMessages, "assistant", t("assistantPlaceholderReply"));
+  }, 240);
+}
+
+function seedChatDockWelcome() {
+  const gridRefs = styleShellBridge.gridRefs;
+  if (!gridRefs.chatMessages || gridRefs.chatMessages.children.length > 0) {
+    return;
+  }
+
+  appendChatMessage(gridRefs.chatMessages, "assistant", t("assistantWelcome"));
 }
 
 function chooseWorkspaceFile(preferredFile, files) {
@@ -3473,6 +3577,7 @@ function applyUiStyleStrategy() {
     root: document.documentElement,
     settingsRoot: settingsFactoryRoot,
   });
+  syncSidebar();
 }
 
 function persistUiStyleState() {
@@ -4583,7 +4688,7 @@ async function openPaletteConfigEditor() {
     confirmLabel: t("confirm"),
     cancelLabel: t("cancel"),
     textarea: buildCustomPaletteConfigText(),
-    placeholder: "{\n  \"$schema\": \"https://styio.dev/schemas/theme-customizations.json\"\n}",
+    placeholder: "{\n  \"$schema\": \"https://vityo.dev/schemas/theme-customizations.json\"\n}",
   });
   if (rawText === null) {
     return;
@@ -5173,6 +5278,24 @@ bindStyleShellBridgeEvents(styleShellBridge, {
     activeDrawerTab = "settings";
     sidebarOpen = true;
     syncSidebar();
+  },
+});
+
+styleShellBridge.gridRefs.toggleProjectSidebarButton?.addEventListener("click", () => {
+  projectSidebarOpen = !projectSidebarOpen;
+  syncProjectSidebar();
+});
+
+styleShellBridge.gridRefs.toggleChatDockButton?.addEventListener("click", () => {
+  chatDockOpen = !chatDockOpen;
+  syncChatDock();
+});
+
+bindChatDockEvents(styleShellBridge.gridRefs, {
+  onSend: handleChatDockSend,
+  onCollapse: () => {
+    chatDockOpen = false;
+    syncChatDock();
   },
 });
 
@@ -5946,6 +6069,9 @@ async function bootstrap() {
   toggleGlyphs.setAttribute("title", glyphsOn ? t("disableGlyphRendering") : t("enableGlyphRendering"));
   updateIndentUi();
   syncSidebar();
+  syncProjectSidebar();
+  syncChatDock();
+  seedChatDockWelcome();
   await loadWorkspace();
   activeTreePath = "";
   editorInput.value = fileSources[currentFile] ?? "";

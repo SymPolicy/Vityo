@@ -3,24 +3,28 @@ from __future__ import annotations
 
 import json
 import hmac
+import ipaddress
 import os
 import secrets
 import shutil
+import socket
+import sys
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import parse_qs, unquote, urlparse, urlsplit
 
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_WORKSPACE = ROOT / "workspace"
-WORKSPACE_CONFIG = ROOT / ".workspace-root"
-HOST = "127.0.0.1"
-PORT = 4180
-SESSION_COOKIE_NAME = "styio_dev_server_session"
-SESSION_TOKEN_HEADER = "X-Styio-Dev-Server-Token"
-SESSION_TOKEN_ENV = "STYIO_DEV_SERVER_TOKEN"
-ENABLE_MUTATION_ENV = "STYIO_DEV_SERVER_ENABLE_MUTATION"
+WORKSPACE_CONFIG = ROOT / ".artifacts" / "workspace-root"
+HOST = os.environ.get("VITYO_DEV_SERVER_HOST", "127.0.0.1")
+PORT = int(os.environ.get("VITYO_DEV_SERVER_PORT", "4180"))
+SESSION_COOKIE_NAME = "vityo_dev_server_session"
+SESSION_TOKEN_HEADER = "X-Vityo-Dev-Server-Token"
+SESSION_TOKEN_ENV = "VITYO_DEV_SERVER_TOKEN"
+ENABLE_MUTATION_ENV = "VITYO_DEV_SERVER_ENABLE_MUTATION"
 SESSION_TOKEN = os.environ.get(SESSION_TOKEN_ENV) or secrets.token_urlsafe(32)
 LOCAL_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
 TRUTHY_ENV_VALUES = {"1", "true", "yes", "y", "on"}
@@ -67,6 +71,32 @@ def is_allowed_local_netloc(raw_host: str | None, *, expected_port: int) -> bool
         return False
 
     return port == expected_port
+
+
+def normalize_hostname(raw: str) -> str:
+    candidate = raw.strip().rstrip(".").casefold()
+    try:
+        return str(ipaddress.ip_address(candidate.strip("[]")))
+    except ValueError:
+        return candidate
+
+
+def host_is_loopback(host: str) -> bool:
+    """True only for a literal loopback address or a localhost name."""
+    candidate = host.strip()
+    try:
+        return ipaddress.ip_address(candidate.strip("[]")).is_loopback
+    except ValueError:
+        pass
+    if normalize_hostname(candidate) == "localhost":
+        return True
+    # inet_aton accepts the shorthand forms the resolver binds (127.1,
+    # 0x7f000001, …); a dotted name that never parses stays untrusted.
+    try:
+        packed = socket.inet_aton(candidate)
+    except (OSError, ValueError):
+        return False
+    return packed[0] == 127
 
 
 def parse_cookie_header(raw_cookie: str | None) -> dict[str, str]:
@@ -120,6 +150,7 @@ def current_workspace() -> Path:
 
 
 def persist_workspace_root(path: Path) -> None:
+    WORKSPACE_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     WORKSPACE_CONFIG.write_text(str(path), encoding="utf-8")
 
 
@@ -130,9 +161,10 @@ def set_workspace_root(raw_path: str) -> Path:
     if not candidate.is_dir():
         raise ValueError("workspace path must point to an existing directory")
 
-    WORKSPACE_ROOT = candidate
-    persist_workspace_root(candidate)
-    return candidate
+    selected = candidate.resolve()
+    WORKSPACE_ROOT = selected
+    persist_workspace_root(selected)
+    return selected
 
 
 def is_ignored(path: Path) -> bool:
@@ -167,6 +199,9 @@ def lookup_case_sensitive_child(parent: Path, name: str) -> Path | None:
 
 def resolve_existing_path_case_sensitive(raw_path: str, *, base: Path | None = None) -> Path:
     candidate = Path(raw_path.strip()).expanduser()
+    if os.name == "nt" and candidate.is_absolute() and candidate.exists():
+        return candidate.resolve()
+
     if candidate.is_absolute():
         current = Path(candidate.anchor)
         parts = list(candidate.parts[1:])
@@ -202,6 +237,7 @@ def resolve_workspace_path(relative_path: str, *, require_exists: bool = False) 
 
         current = current / part
 
+    current = current.resolve()
     if root not in current.parents and current != root:
         raise ValueError("path escapes workspace root")
 
@@ -267,6 +303,11 @@ def workspace_snapshot() -> dict:
 
 def resolve_browser_path(raw_path: str | None) -> Path:
     if raw_path and raw_path.strip():
+        unresolved = Path(raw_path.strip()).expanduser()
+        if not unresolved.is_absolute():
+            unresolved = ROOT / unresolved
+        if unresolved.is_symlink() and not unresolved.exists():
+            raise ValueError("browser path must point to an existing file or directory")
         candidate = resolve_existing_path_case_sensitive(raw_path, base=ROOT)
     else:
         candidate = current_workspace().resolve()
@@ -275,6 +316,14 @@ def resolve_browser_path(raw_path: str | None) -> Path:
         raise ValueError("browser path must point to an existing file or directory")
 
     return candidate.resolve()
+
+
+def path_is_within_root(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 def browser_entry_snapshot(raw_path: str | None, *, include_files: bool = False) -> dict:
@@ -374,8 +423,19 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
 
         self.send_error(status, message)
 
+    def trusted_netloc(self, raw_host: str | None) -> bool:
+        parsed = split_host_port(raw_host)
+        if parsed is None:
+            return False
+
+        hostname, port = parsed
+        if port != self.server.server_port:
+            return False
+
+        return normalize_hostname(hostname) in self.server.trusted_hostnames
+
     def host_is_allowed(self) -> bool:
-        return is_allowed_local_netloc(self.headers.get("Host"), expected_port=self.server.server_port)
+        return self.trusted_netloc(self.headers.get("Host"))
 
     def origin_is_allowed(self) -> bool:
         origin = self.headers.get("Origin")
@@ -386,7 +446,7 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
         if parsed.scheme != "http":
             return False
 
-        return is_allowed_local_netloc(parsed.netloc, expected_port=self.server.server_port)
+        return self.trusted_netloc(parsed.netloc)
 
     def has_valid_session_credential(self) -> bool:
         if token_matches(self.headers.get(SESSION_TOKEN_HEADER)):
@@ -438,7 +498,19 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
         if not self.enforce_host_boundary():
             return
 
+        parsed = urlparse(self.path)
         self._issue_session_cookie = not self.is_api_request()
+        if parsed.path == "/":
+            self.redirect_to_editor()
+            return
+        if parsed.path in ("/index", "/index.html"):
+            self.reject_removed_entrypoint()
+            return
+        if parsed.path in ("/app.js", "/styles.css"):
+            self.reject_removed_entrypoint()
+            return
+        if parsed.path in ("/editor", "/editor/"):
+            self.path = "/editor.html"
         super().do_HEAD()
 
     def do_GET(self) -> None:
@@ -450,6 +522,22 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
             return
 
         self._issue_session_cookie = not parsed.path.startswith("/api/")
+        if parsed.path == "/":
+            self.redirect_to_editor()
+            return
+
+        if parsed.path in ("/index", "/index.html"):
+            self.reject_removed_entrypoint()
+            return
+
+        if parsed.path in ("/app.js", "/styles.css"):
+            self.reject_removed_entrypoint()
+            return
+
+        if parsed.path in ("/editor", "/editor/"):
+            self.path = "/editor.html"
+            super().do_GET()
+            return
 
         if parsed.path == "/api/workspace":
             self.end_json(workspace_snapshot())
@@ -476,15 +564,18 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
                 target = resolve_browser_path(raw_path)
                 if not target.is_file():
                     raise ValueError("path must point to a file")
+                if not path_is_within_root(target, current_workspace()):
+                    self.end_json({"error": "file reads are limited to the current workspace"}, HTTPStatus.FORBIDDEN)
+                    return
                 content = target.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                self.end_json({"error": "file is not utf-8 text"}, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+                return
             except ValueError as error:
                 self.end_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
                 return
             except FileNotFoundError:
                 self.end_json({"error": "file not found"}, HTTPStatus.NOT_FOUND)
-                return
-            except UnicodeDecodeError:
-                self.end_json({"error": "file is not utf-8 text"}, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
                 return
 
             self.end_json({"ok": True, "path": str(target), "content": content})
@@ -495,14 +586,14 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
             try:
                 target = resolve_workspace_path(relative_path, require_exists=True)
                 content = target.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                self.end_json({"error": "file is not utf-8 text"}, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+                return
             except ValueError as error:
                 self.end_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
                 return
             except FileNotFoundError:
                 self.end_json({"error": "file not found"}, HTTPStatus.NOT_FOUND)
-                return
-            except UnicodeDecodeError:
-                self.end_json({"error": "file is not utf-8 text"}, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
                 return
 
             self.end_json(
@@ -516,6 +607,15 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
             return
 
         super().do_GET()
+
+    def redirect_to_editor(self) -> None:
+        self.send_response(HTTPStatus.FOUND)
+        self.send_header("Location", "/editor")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def reject_removed_entrypoint(self) -> None:
+        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self) -> None:
         if not self.enforce_host_boundary():
@@ -750,10 +850,51 @@ class PrototypeHandler(SimpleHTTPRequestHandler):
         self.end_json({"error": "unknown endpoint"}, HTTPStatus.NOT_FOUND)
 
 
+def resolve_listen_address() -> tuple[str, int]:
+    host = os.environ.get("VITYO_DEV_SERVER_HOST", "127.0.0.1")
+    port = int(os.environ.get("VITYO_DEV_SERVER_PORT") or os.environ.get("PORT") or "4180")
+    args = sys.argv[1:]
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--host" and index + 1 < len(args):
+            host = args[index + 1]
+            index += 2
+            continue
+        if arg.startswith("--host="):
+            host = arg.split("=", 1)[1]
+        elif arg == "--port" and index + 1 < len(args):
+            port = int(args[index + 1])
+            index += 2
+            continue
+        elif arg.startswith("--port="):
+            port = int(arg.split("=", 1)[1])
+        index += 1
+    return host, port
+
+
+class LocalDevServer(ThreadingHTTPServer):
+    trusted_hostnames = frozenset(normalize_hostname(name) for name in LOCAL_HOSTNAMES)
+
+    def server_bind(self) -> None:
+        # The local HTTP service needs its bound address, not a reverse DNS name.
+        # HTTPServer.server_bind performs a blocking getfqdn lookup on macOS.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def main() -> None:
     current_workspace().mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer((HOST, PORT), PrototypeHandler)
-    print(f"styio-view dev server listening on http://{HOST}:{PORT}", flush=True)
+    host, port = resolve_listen_address()
+    if not host_is_loopback(host):
+        raise SystemExit(
+            f"refusing to bind {host}: the dev server only listens on loopback"
+        )
+    server = LocalDevServer((host, port), PrototypeHandler)
+    server.trusted_hostnames = frozenset(
+        normalize_hostname(name) for name in LOCAL_HOSTNAMES
+    )
+    print(f"Vityo dev server listening on http://{host}:{port}", flush=True)
     if mutation_enabled():
         print("workspace mutation APIs enabled for this local dev session", flush=True)
     else:

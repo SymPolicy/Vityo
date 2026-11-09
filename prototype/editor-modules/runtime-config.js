@@ -21,16 +21,16 @@ fn main(input) {
 };
 
 export const storageKeys = {
-  glyphHighlight: "styio-view:glyph-highlights",
-  autoSave: "styio-view:auto-save",
-  language: "styio-view:language",
-  uiStyle: "styio-view:ui-style",
-  themeSettings: "styio-view:theme-settings",
-  editorSettings: "styio-view:editor-settings",
-  customPaletteConfig: "styio-view:custom-palette-config",
+  glyphHighlight: "Vityo:glyph-highlights",
+  autoSave: "Vityo:auto-save",
+  language: "Vityo:language",
+  uiStyle: "Vityo:ui-style",
+  themeSettings: "Vityo:theme-settings",
+  editorSettings: "Vityo:editor-settings",
+  customPaletteConfig: "Vityo:custom-palette-config",
 };
 
-export const customPaletteConfigSchema = "https://styio.dev/schemas/theme-customizations.json";
+export const customPaletteConfigSchema = "https://vityo.dev/schemas/theme-customizations.json";
 
 export function createInitialRuntimeState() {
   return {
@@ -46,6 +46,8 @@ export function createInitialRuntimeState() {
     saveInFlight: false,
     latestAnalysis: null,
     sidebarOpen: false,
+    projectSidebarOpen: true,
+    chatDockOpen: true,
     activeDrawerTab: DRAWER_TABS.FILES,
     linkedSurfaceActiveTab: SURFACE_KEYS.THEME,
     editorModeLinkedToTheme: true,

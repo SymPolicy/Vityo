@@ -1,0 +1,376 @@
+name: local-ci-gate
+
+on:
+  schedule:
+    - cron: "37 18 * * *"
+  pull_request:
+  push:
+    branches:
+      - nightly
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-ci-gate:
+    name: local-ci-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      PYTHON_BIN: python3
+      VITYO_PYTHON_VERSION: "3.13.5"
+      VITYO_NODE_VERSION: "24.15.0"
+      VITYO_FLUTTER_VERSION: "3.41.7"
+
+    steps:
+      - name: Checkout Vityo nightly
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          path: vityo-nightly
+
+      - name: Set up standardized Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.VITYO_PYTHON_VERSION }}
+
+      - name: Set up Rust 1.88 toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f  # v2.0.0, community-maintained
+        with:
+          toolchain: "1.88.0"
+
+      - name: Set up standardized Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: ${{ env.VITYO_NODE_VERSION }}
+
+      - name: Set up standardized Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2
+        with:
+          flutter-version: ${{ env.VITYO_FLUTTER_VERSION }}
+
+      - name: Install CI Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@2e1d749697dd1612b833dba4a722266286fbefcd  # v2
+        with:
+          chrome-version: stable
+          install-dependencies: true
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 cmake ninja-build pkg-config libssl-dev libgtk-3-dev libsecret-1-dev liblzma-dev libclang-rt-18-dev lld-18 llvm-18-dev
+
+      - name: Verify standardized Linux toolchain
+        run: |
+          "$PYTHON_BIN" --version | grep -F "${VITYO_PYTHON_VERSION}"
+          node --version | grep -F "v${VITYO_NODE_VERSION}"
+          npm --version
+          flutter --version | grep -m1 '^Flutter ' | grep -F "${VITYO_FLUTTER_VERSION}"
+          flutter config --enable-web --enable-linux-desktop
+          "${{ steps.setup-chrome.outputs.chrome-path }}" --version
+
+      - name: Restore repository dependencies
+        working-directory: vityo-nightly
+        run: |
+          "$PYTHON_BIN" -m pip install coverage
+          ./scripts/bootstrap-workspace.sh --platforms web,linux
+
+      - name: Resolve CI refs
+        id: ci_refs
+        shell: bash
+        working-directory: vityo-nightly
+        run: python3 scripts/resolve-ci-refs.py >> "$GITHUB_OUTPUT"
+
+      - name: Run complete Linux delivery
+        working-directory: vityo-nightly
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+          VITYO_CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: >-
+          "$PYTHON_BIN" scripts/vityo.py deliver --mode ci --platform linux
+          --base "${{ steps.ci_refs.outputs.base_ref }}"
+          --range "${{ steps.ci_refs.outputs.range }}"
+          --install-root "$RUNNER_TEMP/vityo-installed"
+      - name: Upload Linux coverage reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: vityo-coverage-reports-linux
+          path: |
+            vityo-nightly/.coverage
+            vityo-nightly/products/vityo_app/coverage/lcov.info
+            vityo-nightly/build/evidence/product-gate-linux.json
+            vityo-nightly/build/evidence/native-pty-linux.json
+            vityo-nightly/build/evidence/product-matrix-linux.json
+            vityo-nightly/build/evidence/startup-linux.json
+          if-no-files-found: ignore
+
+      - name: Upload Linux Nightly package
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: vityo-nightly-linux
+          path: vityo-nightly/build/nightly
+          if-no-files-found: error
+
+  windows-native:
+    name: windows-native
+    runs-on: windows-latest
+    timeout-minutes: 75
+    env:
+      PYTHON_BIN: python
+      VITYO_PYTHON_VERSION: "3.13.5"
+      VITYO_NODE_VERSION: "24.15.0"
+      VITYO_FLUTTER_VERSION: "3.41.7"
+
+    steps:
+      - name: Checkout Vityo nightly
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          path: vityo-nightly
+
+      - name: Set up standardized Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.VITYO_PYTHON_VERSION }}
+
+      - name: Set up Rust 1.88 toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f  # v2.0.0, community-maintained
+        with:
+          toolchain: "1.88.0"
+
+      - name: Set up standardized Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: ${{ env.VITYO_NODE_VERSION }}
+
+      - name: Set up standardized Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2
+        with:
+          flutter-version: ${{ env.VITYO_FLUTTER_VERSION }}
+
+      - name: Install CI Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@2e1d749697dd1612b833dba4a722266286fbefcd  # v2
+        with:
+          chrome-version: stable
+
+      - name: Install CMake, Ninja, and LLVM 18 development package
+        uses: mamba-org/setup-micromamba@add3a49764cedee8ee24e82dfde87f5bc2914462  # v2
+        with:
+          environment-name: styio-llvm18
+          cache-environment: true
+          create-args: >-
+            cmake
+            ninja
+            llvm=18.1.8
+            llvmdev=18.1.8
+            clang-tools=18.1.8
+            zlib
+            libxml2
+            zstd
+
+      - name: Locate LLVM 18
+        shell: pwsh
+        run: |
+          $condaPrefix = Join-Path $env:MAMBA_ROOT_PREFIX "envs\styio-llvm18"
+          if (!(Test-Path $condaPrefix) -and $env:CONDA_PREFIX) {
+            $condaPrefix = $env:CONDA_PREFIX
+          }
+          if (!(Test-Path $condaPrefix)) {
+            throw "micromamba environment was not found"
+          }
+
+          $llvmRoot = Join-Path $condaPrefix "Library"
+          $llvmConfig = Join-Path $llvmRoot "lib\cmake\llvm\LLVMConfig.cmake"
+          if (!(Test-Path $llvmConfig)) {
+            throw "LLVMConfig.cmake was not found in $llvmRoot"
+          }
+
+          $llvmDir = Split-Path -Parent $llvmConfig
+
+          Add-Content $env:GITHUB_PATH (Join-Path $llvmRoot "bin")
+          Add-Content $env:GITHUB_PATH (Join-Path $condaPrefix "Scripts")
+          Add-Content $env:GITHUB_ENV "LLVM_DIR=$llvmDir"
+          Add-Content $env:GITHUB_ENV "STYIO_NATIVE_TOOLCHAIN_ROOT=$llvmRoot"
+
+          $diaLib = Get-ChildItem -Path (Join-Path $env:ProgramFiles "Microsoft Visual Studio") -Recurse -Filter diaguids.lib -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*\DIA SDK\lib\amd64\diaguids.lib" } |
+            Select-Object -First 1
+          if (!$diaLib) {
+            throw "MSVC DIA SDK diaguids.lib was not found"
+          }
+          $vsInstallDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $diaLib.FullName)))
+          Add-Content $env:GITHUB_ENV "VSINSTALLDIR=$vsInstallDir"
+
+      - name: Verify standardized Windows toolchain
+        shell: pwsh
+        run: |
+          $pythonVersion = python --version
+          if ($pythonVersion -notlike "*$env:VITYO_PYTHON_VERSION*") { throw "Unexpected Python version: $pythonVersion" }
+          $nodeVersion = node --version
+          if ($nodeVersion -ne "v$env:VITYO_NODE_VERSION") { throw "Unexpected Node.js version: $nodeVersion" }
+          npm --version
+          $flutterVersionOutput = flutter --version
+          $flutterVersion = ($flutterVersionOutput -split "`r?`n" | Where-Object { $_ -like "Flutter *" } | Select-Object -First 1)
+          if (!$flutterVersion) { throw "Flutter version line not found: $flutterVersionOutput" }
+          if ($flutterVersion -notlike "*$env:VITYO_FLUTTER_VERSION*") { throw "Unexpected Flutter version: $flutterVersion" }
+          flutter config --enable-web --enable-windows-desktop
+          & "${{ steps.setup-chrome.outputs.chrome-path }}" --version
+
+      - name: Restore repository dependencies
+        shell: pwsh
+        working-directory: vityo-nightly
+        run: |
+          python -m pip install coverage
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap-workspace.ps1 -Platforms web,windows
+
+      - name: Resolve CI refs
+        id: ci_refs
+        shell: bash
+        working-directory: vityo-nightly
+        run: python3 scripts/resolve-ci-refs.py >> "$GITHUB_OUTPUT"
+
+      - name: Run complete Windows delivery
+        working-directory: vityo-nightly
+        shell: bash
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+          VITYO_CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          PYTHON_BIN: python
+        run: >-
+          "$PYTHON_BIN" scripts/vityo.py deliver --mode ci --platform windows
+          --base "${{ steps.ci_refs.outputs.base_ref }}"
+          --range "${{ steps.ci_refs.outputs.range }}"
+          --install-root "$RUNNER_TEMP/vityo-installed"
+      - name: Upload Windows coverage reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: vityo-coverage-reports-windows
+          path: |
+            vityo-nightly/.coverage
+            vityo-nightly/products/vityo_app/coverage/lcov.info
+            vityo-nightly/build/evidence/product-gate-windows.json
+            vityo-nightly/build/evidence/native-pty-windows.json
+            vityo-nightly/build/evidence/product-matrix-windows.json
+            vityo-nightly/build/evidence/startup-windows.json
+          if-no-files-found: ignore
+
+      - name: Upload Windows Nightly package
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: vityo-nightly-windows
+          path: vityo-nightly/build/nightly
+          if-no-files-found: error
+
+  macos-native:
+    name: macos-native
+    runs-on: macos-latest
+    timeout-minutes: 75
+    env:
+      PYTHON_BIN: python3
+      VITYO_PYTHON_VERSION: "3.13.5"
+      VITYO_NODE_VERSION: "24.15.0"
+      VITYO_FLUTTER_VERSION: "3.41.7"
+
+    steps:
+      - name: Checkout Vityo nightly
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          path: vityo-nightly
+
+      - name: Set up standardized Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.VITYO_PYTHON_VERSION }}
+
+      - name: Set up Rust 1.88 toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f  # v2.0.0, community-maintained
+        with:
+          toolchain: "1.88.0"
+
+      - name: Set up standardized Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: ${{ env.VITYO_NODE_VERSION }}
+
+      - name: Set up standardized Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2
+        with:
+          flutter-version: ${{ env.VITYO_FLUTTER_VERSION }}
+
+      - name: Install CI Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@2e1d749697dd1612b833dba4a722266286fbefcd  # v2
+        with:
+          chrome-version: stable
+
+      - name: Install macOS LLVM
+        run: |
+          brew install llvm@18
+          echo "LLVM_DIR=$(brew --prefix llvm@18)/lib/cmake/llvm" >> "$GITHUB_ENV"
+          echo "$(brew --prefix llvm@18)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify standardized macOS toolchain
+        run: |
+          "$PYTHON_BIN" --version | grep -F "${VITYO_PYTHON_VERSION}"
+          node --version | grep -F "v${VITYO_NODE_VERSION}"
+          npm --version
+          flutter --version | grep -m1 '^Flutter ' | grep -F "${VITYO_FLUTTER_VERSION}"
+          flutter config --enable-web --enable-macos-desktop
+          "${{ steps.setup-chrome.outputs.chrome-path }}" --version
+
+      - name: Restore repository dependencies
+        working-directory: vityo-nightly
+        run: |
+          "$PYTHON_BIN" -m pip install coverage
+          ./scripts/bootstrap-workspace.sh --platforms web,macos
+
+      - name: Resolve CI refs
+        id: ci_refs
+        shell: bash
+        working-directory: vityo-nightly
+        run: python3 scripts/resolve-ci-refs.py >> "$GITHUB_OUTPUT"
+
+      - name: Run complete macOS delivery
+        working-directory: vityo-nightly
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+          VITYO_CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          PYTHON_BIN: ${{ env.PYTHON_BIN }}
+        run: >-
+          "$PYTHON_BIN" scripts/vityo.py deliver --mode ci --platform macos
+          --base "${{ steps.ci_refs.outputs.base_ref }}"
+          --range "${{ steps.ci_refs.outputs.range }}"
+          --install-root "$RUNNER_TEMP/vityo-installed"
+      - name: Upload macOS coverage reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: vityo-coverage-reports-macos
+          path: |
+            vityo-nightly/.coverage
+            vityo-nightly/products/vityo_app/coverage/lcov.info
+            vityo-nightly/build/evidence/product-gate-macos.json
+            vityo-nightly/build/evidence/native-pty-macos.json
+            vityo-nightly/build/evidence/product-matrix-macos.json
+            vityo-nightly/build/evidence/startup-macos.json
+          if-no-files-found: ignore
+
+      - name: Upload macOS Nightly package
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: vityo-nightly-macos
+          path: vityo-nightly/build/nightly
+          if-no-files-found: error

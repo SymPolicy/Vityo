@@ -1,0 +1,64 @@
+name: windows-native
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native:
+    name: windows-native
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      VITYO_PYTHON_VERSION: "3.13.5"
+      VITYO_FLUTTER_VERSION: "3.41.7"
+
+    steps:
+      - name: Checkout Vityo nightly
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          path: vityo-nightly
+
+      - name: Set up standardized Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ env.VITYO_PYTHON_VERSION }}
+
+      - name: Set up Rust 1.88 toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f  # v2.0.0, community-maintained
+        with:
+          toolchain: "1.88.0"
+
+      - name: Set up standardized Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2
+        with:
+          flutter-version: ${{ env.VITYO_FLUTTER_VERSION }}
+
+      - name: Restore workspace dependencies
+        working-directory: vityo-nightly
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-workspace.ps1 -Platforms windows -SkipPlatformBootstrap
+
+      - name: Build and package Windows candidate
+        working-directory: vityo-nightly
+        shell: powershell
+        run: python scripts/vityo.py build --mode ci --platform windows
+
+      - name: Upload Windows build and package
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: vityo-windows-release
+          path: |
+            vityo-nightly/products/vityo_app/build/windows/**/*
+            vityo-nightly/build/nightly/*
+          if-no-files-found: ignore

@@ -2,6 +2,8 @@
 
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
+import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -11,11 +13,21 @@ import { chromium } from "playwright-core";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROTOTYPE_ROOT = path.resolve(__dirname, "..");
-const DEFAULT_URL = process.env.STYIO_EDITOR_URL ?? "http://127.0.0.1:4173/editor.html";
-const CHROME_PATH =
-  process.env.STYIO_CHROME_PATH ??
-  process.env.CHROME_EXECUTABLE ??
-  "/usr/bin/chromium";
+const DEFAULT_URL = process.env.VITYO_EDITOR_URL ?? "http://127.0.0.1:4180/editor";
+const CHROME_CANDIDATES = [
+  process.env.VITYO_CHROME_PATH,
+  process.env.CHROME_EXECUTABLE,
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/google-chrome",
+  "/opt/homebrew/bin/chromium",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+].filter((candidate) => typeof candidate === "string" && candidate.length > 0);
+const PYTHON_BIN = process.env.PYTHON_BIN ?? "python3";
 const ARTIFACT_DIR = path.join(PROTOTYPE_ROOT, ".artifacts");
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, "editor-load-failure.png");
 const SERVER_READY_TIMEOUT_MS = 15000;
@@ -30,17 +42,93 @@ function fail(message) {
   process.exitCode = 1;
 }
 
+// Cleanup must never be able to hang the step. An unbounded `browser.close()`
+// after the browser had already gone away, plus a dev-server child whose pipes
+// were still referenced, froze the macOS delivery until its job timeout.
+async function settle(promise, timeoutMs) {
+  let timer;
+  try {
+    await Promise.race([
+      promise.then(
+        () => {},
+        () => {},
+      ),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function waitForExit(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    function onExit() {
+      clearTimeout(timer);
+      resolve(true);
+    }
+    const timer = setTimeout(() => {
+      child.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+    child.once("exit", onExit);
+  });
+}
+
+async function stopServer(child) {
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+  if (await waitForExit(child, 0)) return;
+  child.kill("SIGTERM");
+  if (await waitForExit(child, 5000)) return;
+  child.kill("SIGKILL");
+  await waitForExit(child, 5000);
+}
+
+// Set the exit code, then force termination shortly afterwards so a stray
+// handle cannot keep the step alive. The timer is unref'd, so a clean run still
+// exits as soon as its work is drained.
+function exitWhenDrained(code) {
+  process.exitCode = code;
+  setTimeout(() => process.exit(code), 2000).unref();
+}
+
 async function ensureArtifactDir() {
   await fs.mkdir(ARTIFACT_DIR, { recursive: true });
 }
 
 async function canReach(url) {
-  try {
-    const response = await fetch(url, { redirect: "follow" });
-    return response.ok;
-  } catch {
-    return false;
-  }
+  return new Promise((resolve) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      resolve(false);
+      return;
+    }
+    const client = parsed.protocol === "https:" ? https : http;
+    const request = client.request(
+      parsed,
+      { method: "GET", timeout: 2000 },
+      (response) => {
+        response.resume();
+        response.on("end", () => {
+          const status = response.statusCode ?? 0;
+          resolve(status >= 200 && status < 400);
+        });
+      },
+    );
+    request.on("timeout", () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.on("error", () => resolve(false));
+    request.end();
+  });
 }
 
 async function waitForReachable(url, timeoutMs) {
@@ -60,7 +148,7 @@ async function ensureServer(url) {
   }
 
   log("editor url is not reachable, starting prototype/dev_server.py");
-  const child = spawn("python3", ["dev_server.py"], {
+  const child = spawn(PYTHON_BIN, ["dev_server.py"], {
     cwd: PROTOTYPE_ROOT,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -81,16 +169,28 @@ async function ensureServer(url) {
   return { child, started: true };
 }
 
-async function runSelfTest() {
-  if (!(await fs.stat(CHROME_PATH).then(() => true).catch(() => false))) {
-    throw new Error(`chrome executable not found: ${CHROME_PATH}`);
+async function resolveChromePath() {
+  for (const candidate of CHROME_CANDIDATES) {
+    if (await fs.stat(candidate).then(() => true).catch(() => false)) {
+      return candidate;
+    }
   }
+  throw new Error(
+    `chrome executable not found; set VITYO_CHROME_PATH (checked ${CHROME_CANDIDATES.join(", ")})`,
+  );
+}
+
+async function runSelfTest() {
+  const chromePath = await resolveChromePath();
 
   const server = await ensureServer(DEFAULT_URL);
   const browser = await chromium.launch({
     headless: true,
-    executablePath: CHROME_PATH,
-    args: ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check"],
+    executablePath: chromePath,
+    // Playwright supplies its own headless flag. Passing `--headless=new` as
+    // well produced a browser that exited between launch and the first page on
+    // the macOS CI runner, so let Playwright own the mode.
+    args: ["--disable-gpu", "--no-first-run", "--no-default-browser-check"],
   });
 
   const page = await browser.newPage({
@@ -194,6 +294,8 @@ async function runSelfTest() {
       const drawerTabs = rect("#sharedDrawerTabs");
       const closeButton = rect("#gridCloseSidebar");
       const drawerMount = rect("#gridDrawerMount");
+      const chatDock = rect("#gridChatDock");
+      const chatDockSpacer = rect("#gridChatDockSpacer");
 
       if (
         !mainCard ||
@@ -244,6 +346,8 @@ async function runSelfTest() {
         drawerContentLeftInset: drawerMount.left - sideDrawer.left,
         drawerContentRightInset: sideDrawer.right - drawerMount.right,
         drawerContentBottomInset: sideDrawer.bottom - drawerMount.bottom,
+        chatDockHeight: chatDock?.height ?? 0,
+        chatDockSpacerHeight: chatDockSpacer?.height ?? 0,
       };
     });
   }
@@ -380,6 +484,10 @@ async function runSelfTest() {
         throw new Error("failed to capture expanded grid shell geometry");
       }
 
+      const collapsedChatExtra =
+        collapsed.chatDockHeight > 0
+          ? collapsed.chatDockHeight + collapsed.chatDockSpacerHeight + collapsed.expectedBlockStartInset
+          : 0;
       const tolerance = 1.1;
       const checks = [
         ["toolbar/file-tabs height", collapsed.toolbarHeight, collapsed.fileTabsHeight],
@@ -400,7 +508,7 @@ async function runSelfTest() {
         ["tabs center-top inset", collapsed.fileTabsCenterTopInset, expanded.drawerTabsCenterTopInset],
         ["editor left inset", collapsed.editorLeftInset, collapsed.expectedInlineInset],
         ["editor right inset", collapsed.editorRightInset, collapsed.expectedInlineInset],
-        ["editor bottom inset", collapsed.editorBottomInset, collapsed.expectedBlockStartInset],
+        ["editor bottom inset", collapsed.editorBottomInset, collapsed.expectedBlockStartInset + collapsedChatExtra],
         ["drawer content left inset", expanded.drawerContentLeftInset, expanded.expectedInlineInset],
         ["drawer content right inset", expanded.drawerContentRightInset, expanded.expectedInlineInset],
         ["drawer content bottom inset", expanded.drawerContentBottomInset, expanded.expectedBlockStartInset],
@@ -443,7 +551,7 @@ async function runSelfTest() {
       }
 
       const updatedState = await page.evaluate(() => {
-        const api = window.__styioGridLayoutConfig;
+        const api = window.__vityoGridLayoutConfig;
         if (!api) {
           return null;
         }
@@ -505,7 +613,7 @@ async function runSelfTest() {
       }
 
       const resetState = await page.evaluate(() => {
-        const api = window.__styioGridLayoutConfig;
+        const api = window.__vityoGridLayoutConfig;
         return api?.reset() ?? null;
       });
 
@@ -562,6 +670,62 @@ async function runSelfTest() {
       await page.waitForFunction(() => document.getElementById("drawerPanelSettings")?.classList.contains("is-active"), null, {
         timeout: 10000,
       });
+    });
+
+    await runStep("verify-ide-layout", async () => {
+      await selectStyle(expectedStyles[0]);
+      await page.waitForFunction(() => document.body.dataset.uiStyle === "grid", null, { timeout: 10000 });
+
+      await page.waitForFunction(() => {
+        const sidebar = document.getElementById("gridProjectSidebar");
+        const mount = document.getElementById("gridProjectTreeMount");
+        const filesPanel = document.getElementById("drawerPanelFiles");
+        if (!sidebar || !mount || !filesPanel) {
+          return false;
+        }
+        const style = getComputedStyle(document.body);
+        const expectedWidth = Number.parseFloat(style.getPropertyValue("--grid-project-sidebar-width-open")) || 0;
+        const width = sidebar.getBoundingClientRect().width;
+        return Math.abs(width - expectedWidth) <= 1 && filesPanel.parentElement === mount;
+      }, null, { timeout: 10000 });
+
+      await page.waitForFunction(() => {
+        const drawerMount = document.getElementById("gridDrawerMount");
+        const settingsPanel = document.getElementById("drawerPanelSettings");
+        return !!drawerMount && !!settingsPanel && settingsPanel.parentElement === drawerMount;
+      }, null, { timeout: 10000 });
+
+      await page.waitForSelector("#gridChatDock", { state: "visible", timeout: 10000 });
+      const messagesBefore = await page.evaluate(
+        () => document.getElementById("gridChatMessages")?.children.length ?? 0,
+      );
+      await page.fill("#gridChatInput", "hello vityo");
+      await page.click("#gridChatSend");
+      await page.waitForFunction(
+        (before) => (document.getElementById("gridChatMessages")?.children.length ?? 0) >= before + 2,
+        messagesBefore,
+        { timeout: 10000 },
+      );
+
+      await page.click("#gridToggleChatDock");
+      await page.waitForFunction(() => !document.body.classList.contains("chat-dock-open"), null, { timeout: 10000 });
+      await page.waitForSelector("#gridChatDock", { state: "hidden", timeout: 10000 });
+      await page.click("#gridToggleChatDock");
+      await page.waitForFunction(() => document.body.classList.contains("chat-dock-open"), null, { timeout: 10000 });
+      await page.waitForSelector("#gridChatDock", { state: "visible", timeout: 10000 });
+
+      await page.click("#gridToggleProjectSidebar");
+      await page.waitForFunction(() => {
+        const sidebar = document.getElementById("gridProjectSidebar");
+        return !!sidebar && sidebar.getBoundingClientRect().width <= 1;
+      }, null, { timeout: 10000 });
+      await page.click("#gridToggleProjectSidebar");
+      await page.waitForFunction(() => {
+        const style = getComputedStyle(document.body);
+        const expectedWidth = Number.parseFloat(style.getPropertyValue("--grid-project-sidebar-width-open")) || 0;
+        const sidebar = document.getElementById("gridProjectSidebar");
+        return !!sidebar && Math.abs(sidebar.getBoundingClientRect().width - expectedWidth) <= 1;
+      }, null, { timeout: 10000 });
     });
 
     await runStep("open-theme-palette", async () => {
@@ -698,14 +862,19 @@ async function runSelfTest() {
         .join("\n\n"),
     );
   } finally {
-    await browser.close();
+    await settle(browser.close(), 15000);
     if (server.started && server.child) {
-      server.child.kill("SIGTERM");
+      await stopServer(server.child);
     }
   }
 }
 
-runSelfTest().catch(async (error) => {
-  fail(`editor load self-test failed: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+runSelfTest().then(
+  () => {
+    exitWhenDrained(process.exitCode ?? 0);
+  },
+  (error) => {
+    fail(`editor load self-test failed: ${error?.message ?? error}`);
+    exitWhenDrained(1);
+  },
+);

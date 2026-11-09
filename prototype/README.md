@@ -1,9 +1,15 @@
 # Prototype Surface
 
-当前目录是 `styio-view` 的高保真原型与本地开发壳，不依赖 Flutter 工具链。
+> **状态：Draft（已归档，不再维护）。** 自 2026-07-26 起，本目录的 JavaScript 原型不再是默认客户端；默认客户端为 Flutter 应用（`products/vityo_app`）。本目录仅作历史参考保留，不再接收新功能。
 
-这里同时也是当前仓库里“给人维护的 Web Editor 入口”。
-`frontend/styio_view_app/build/web` 之类的 Flutter 生成物只用于构建验证，不作为人工维护页面。
+**Purpose:** Describe the handwritten `Vityo` prototype surfaces, their local server, and the repo-local governance checks that keep them owned and testable.
+
+**Last updated:** 2026-07-26
+
+当前目录是 `Vityo` 的高保真原型与本地开发壳，不依赖 Flutter 工具链。
+
+这里曾经是仓库里"给人维护的 Web Editor 入口"，现已归档为 Draft。
+`products/vityo_app`（Flutter）是当前默认打开的客户端。
 
 仓库级 bootstrap、共享工具链和常用验证命令见 [../docs/BUILD-AND-DEV-ENV.md](../docs/BUILD-AND-DEV-ENV.md)；本页只描述手写原型本身。
 
@@ -21,6 +27,9 @@
 8. `editor-modules/*.js`: focused editor 的配置、枚举、主题模板、渲染调度与默认状态模块
 9. `GRID-STYLE-REFERENCE.md`: `Grid` 风格的布局结构、共享变量、几何约束与自测规则
 10. `GRID-STYLE-PRACTICE.md`: `Grid` 风格在重构、调样和验证过程中沉淀下来的工程经验与维护方法
+11. `PROTOTYPE-GOVERNANCE.md`: top-level HTML 原型的治理规则、分类和 gate
+12. `prototype-manifest.json`: top-level HTML 原型清单，声明 canonical / gallery / style experiment 边界
+13. `scripts/check-prototype-governance.mjs`: manifest 与治理文档的可执行校验
 
 ## Current Focus
 
@@ -55,14 +64,18 @@
 13. 点击 `Staged: 1` 后会出现 restart banner，表达热更新在下次重启时切换新模块
 14. 在左侧 `Raw Source Buffer` 里直接输入源码，右侧 `Render Projection` 会实时重绘符号和函数块表面
 15. 当前 `Ctrl+Enter` 会先检查最小可编译单元；未闭合的函数块会直接给出 compile blocked
-16. 启动服务时显式设置 `STYIO_DEV_SERVER_ENABLE_MUTATION=1` 后，点击 `Save` 或按 `Command/Ctrl+S` 会把当前文件写回 `prototype/workspace/<file>.styio`
-17. 访问 `http://127.0.0.1:4173/editor.html` 可以打开只保留单一编辑面的 focused editor 版本
+16. 启动服务时显式设置 `VITYO_DEV_SERVER_ENABLE_MUTATION=1` 后，点击 `Save` 或按 `Command/Ctrl+S` 会把当前文件写回 `prototype/workspace/<file>.styio`
+17. 访问 `http://127.0.0.1:4173/editor.html` 可以打开只保留单一编辑面的 focused editor 界面
 18. focused editor 右上角按钮会呼出右侧抽屉，里面分成 `目录树` 和 `设置` 两个 Tab
 19. focused editor 当前固定只维护 `main.styio`，不再混入其它非主线示例文件
 20. 当前默认视觉基线为 `Graphite` 壳层，并以 `#F4C76A` 作为默认强调色和 symbol 高亮色
 21. 当前原型支持导入 / 编辑一份参考 VS Code 结构的 JSONC 调色盘配置，示例见 `theme-config.example.jsonc`
-22. 当前 canonical 配置存放在浏览器 `localStorage` 的 `styio-view:custom-palette-config`
+22. 当前 canonical 配置存放在浏览器 `localStorage` 的 `Vityo:custom-palette-config`
 23. 手写 Web IDE 的设计理念、分层规则和标准工作流，见 `../docs/specs/HANDWRITTEN-WEB-IDE-ENGINEERING-HANDBOOK.md`
+24. `Grid` 风格为 IDE 三区域布局：左侧固定项目侧栏（工作区卡片 + 操作行 + 文件树）、顶部标签页切换栏、底部对话坞
+25. 点击工具栏最左侧按钮可收起/展开左侧项目侧栏；收起时侧栏宽度归零
+26. 右侧抽屉在 `Grid` 下只承载设置面板，`目录树` Tab 被隐藏
+27. 点击工具栏右侧对话图标或对话坞标题栏按钮可收起/展开底部对话坞；输入框按 Enter 发送、Shift+Enter 换行；AI 后端未接入，发送后只追加一条占位回复
 
 ## Module Structure
 
@@ -75,8 +88,9 @@
 7. `editor-modules/surface-actions.js`: `Theme / Editor` 风格行为的层级定义，区分 `surface / section / leaf`
 8. `editor-modules/grid-style/layout-config-store.js`: `Grid` 风格的单例布局配置源，负责配置持有、订阅更新与页面自动同步
 9. `editor-modules/grid-style/layout-manager.js`: `Grid` 风格的纯布局推导器，负责把配置换算成 CSS 变量
-10. `scripts/check-editor-load.mjs`: focused editor 页面加载自测，覆盖页面启动、侧边栏展开、设置区渲染、Theme 切换、`Symbol Highlight` 展开与 `Grid` 运行时布局配置更新
+10. `scripts/check-editor-load.mjs`: focused editor 页面加载自测，覆盖页面启动、侧边栏展开、设置区渲染、Theme 切换、`Symbol Highlight` 展开、`Grid` 运行时布局配置更新与 IDE 布局（左侧文件树、底部对话坞）
 11. `GRID-STYLE-PRACTICE.md`: `Grid` 风格这一轮重构和调样的经验文档，和规则文档配套维护
+12. `editor-modules/grid-style/chat-dock.js`: 底部对话坞的消息追加、输入读取与事件绑定模块
 
 `editor.js` 中和 `Theme / Editor` 相关的模式切换、palette 切换，应优先通过 surface controller 入口处理，再由渲染切片调度对应区域刷新；不要在事件处理器里直接串行调用多个 UI 同步函数。
 
@@ -89,23 +103,25 @@
 
 ## Self-Test
 
-1. 在 `prototype/` 下运行 `npm run selftest:editor`
-2. 若使用仓库内的 `dev_server.py`，请显式设置 `STYIO_EDITOR_URL=http://127.0.0.1:4180/editor.html`
-3. 这条脚本会自动检查 `editor.html` 是否可打开，并在需要时自动启动 `dev_server.py`
-4. 自测会覆盖：
+1. 在 `prototype/` 下运行 `npm run governance`，确认 top-level HTML 原型都被 `prototype-manifest.json` 声明并归属到 owner。
+2. 运行 `npm run selftest:editor`，检查当前 canonical focused editor。
+3. 若使用仓库内的 `dev_server.py`，请显式设置 `VITYO_EDITOR_URL=http://127.0.0.1:4180/editor.html`
+4. 这条脚本会自动检查 `editor.html` 是否可打开，并在需要时自动启动 `dev_server.py`
+5. 自测会覆盖：
    - 页面基础资源加载
    - 侧边栏展开
    - 设置页切换
    - `Theme` 的 `Palette` 和 `Light / Dark`
    - `Symbol Highlight` 展开
-5. 若失败，会在 `prototype/.artifacts/editor-load-failure.png` 写出失败截图
+   - IDE 布局：文件树位于左侧项目侧栏、设置面板位于右抽屉、对话坞收发消息与收起/展开、项目侧栏收起/展开
+6. 若失败，会在 `prototype/.artifacts/editor-load-failure.png` 写出失败截图
 
 ## Local Dev Server Security
 
 1. `dev_server.py` 只绑定 `127.0.0.1:4180`，并拒绝非 `localhost` / `127.0.0.1` / `::1` 的 `Host`。
-2. 静态页面响应会设置 `HttpOnly; SameSite=Strict` 的本进程 session cookie；所有 `/api/` 路由都必须携带这个 cookie，或携带 `X-Styio-Dev-Server-Token` / `Authorization: Bearer` 中的当前 session token。
-3. 所有 `POST /api/` 写入路由还必须带同源 `Origin`，并且只有设置 `STYIO_DEV_SERVER_ENABLE_MUTATION=1` 后才会执行本地文件写入。
-4. 若需要固定 token 供本地自动化调用，可在启动服务前设置 `STYIO_DEV_SERVER_TOKEN=<token>`。
+2. 静态页面响应会设置 `HttpOnly; SameSite=Strict` 的本进程 session cookie；所有 `/api/` 路由都必须携带这个 cookie，或携带 `X-Vityo-Dev-Server-Token` / `Authorization: Bearer` 中的当前 session token。
+3. 所有 `POST /api/` 写入路由还必须带同源 `Origin`，并且只有设置 `VITYO_DEV_SERVER_ENABLE_MUTATION=1` 后才会执行本地文件写入。
+4. 若需要固定 token 供本地自动化调用，可在启动服务前设置 `VITYO_DEV_SERVER_TOKEN=<token>`。
 5. 边界回归验证：在仓库根目录运行 `python3 -m unittest prototype/test_dev_server_security.py`。
 
 ## Maintenance Rule
@@ -115,3 +131,5 @@
 3. 若 Flutter Web 行为需要回归到手写页，先在这里验证交互，再考虑是否同步回 Flutter 主壳
 4. 任何内部组件都不得超过外部容器；若空间不足，优先收紧盒模型、加 `min-width: 0`、改成内部滚动或重排，而不是允许内容溢出父容器
 5. 默认界面字体、编辑器字体、数学 glyph 字体和用户可见主题预设名必须优先采用开源、低争议来源；不得把商业专有字体作为默认值，也不得把第三方商业产品名直接当作默认主题标签
+6. 新增、删除或重命名 top-level `*.html` 原型时，必须同步更新 `prototype-manifest.json` 并运行 `npm run governance`
+7. 只有 `prototype-manifest.json` 中的 `canonical` entry 可以定义当前产品行为；`style-experiment` 页面只提供视觉参考，不能引入 workspace mutation、adapter contract 或 dev-server API 语义

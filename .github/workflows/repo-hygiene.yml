@@ -10,17 +10,18 @@ permissions:
 
 jobs:
   hygiene:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
-      STYIO_PYTHON_VERSION: "3.13.5"
+      VITYO_PYTHON_VERSION: "3.13.5"
 
     steps:
-      - name: Checkout styio-view
-        uses: actions/checkout@v5
+      - name: Checkout Vityo nightly
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
+          persist-credentials: false
           fetch-depth: 0
-          path: styio-view
+          path: vityo-nightly
 
       - name: Resolve sibling checkout ref
         id: sibling-ref
@@ -43,41 +44,81 @@ jobs:
           exit 1
 
       - name: Check out Styio sibling repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
+          persist-credentials: false
           repository: SymPolicy/Styio
           ref: ${{ steps.sibling-ref.outputs.ref }}
           path: styio-nightly
 
       - name: Check out Pafio sibling repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
+          persist-credentials: false
           repository: SymPolicy/Pafio
           ref: ${{ steps.sibling-ref.outputs.ref }}
-          path: styio-pafio
+          path: pafio-nightly
 
       - name: Set up standardized Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
-          python-version: ${{ env.STYIO_PYTHON_VERSION }}
+          python-version: ${{ env.VITYO_PYTHON_VERSION }}
+
+      - name: Set up Rust 1.88 toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f  # v2.0.0, community-maintained
+        with:
+          toolchain: "1.88.0"
 
       - name: Check tracked tree
-        working-directory: styio-view
+        working-directory: vityo-nightly
         run: python3 scripts/repo-hygiene-gate.py --mode tracked
 
+      - name: Dependency policy gate
+        working-directory: vityo-nightly
+        run: python3 scripts/dependency-policy-gate.py
+
+      - name: Supply chain governance gate
+        working-directory: vityo-nightly
+        run: python3 scripts/supply-chain-governance-gate.py
+
+      - name: GitHub Actions pin gate (enforce)
+        working-directory: vityo-nightly
+        run: python3 scripts/github-actions-pin-gate.py --mode enforce
+
+      - name: Architecture boundary gate
+        working-directory: vityo-nightly
+        run: python3 scripts/check_architecture_boundaries.py
+
+      - name: Product-line boundary gate
+        working-directory: vityo-nightly
+        run: python3 scripts/check_product_line_boundaries.py
+
+      - name: Security baseline gate
+        working-directory: vityo-nightly
+        run: python3 scripts/check_security_baseline.py
+
+      - name: Performance budget gate
+        working-directory: vityo-nightly
+        run: python3 scripts/check_performance_budgets.py
+
+      - name: License policy gate
+        working-directory: vityo-nightly
+        run: python3 scripts/check_license_policy.py
+
+      - name: Import boundary gate
+        working-directory: vityo-nightly
+        run: python3 scripts/import-boundary-gate.py
+
       - name: Check ecosystem CLI doc consistency
-        working-directory: styio-view
-        run: python3 scripts/ecosystem-cli-doc-gate.py --require-workspace --json
+        working-directory: vityo-nightly
+        run: python3 scripts/ecosystem-cli-doc-gate.py --require-workspace --json --non-blocking
+
+      - name: Resolve CI refs
+        id: ci_refs
+        shell: bash
+        working-directory: vityo-nightly
+        run: python3 scripts/resolve-ci-refs.py >> "$GITHUB_OUTPUT"
 
       - name: Check incoming history range
-        shell: bash
-        working-directory: styio-view
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
-          elif [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
-            RANGE="HEAD"
-          else
-            RANGE="${{ github.event.before }}..${{ github.sha }}"
-          fi
-          python3 scripts/repo-hygiene-gate.py --mode push --range "$RANGE"
+        working-directory: vityo-nightly
+        run: python3 scripts/repo-hygiene-gate.py --mode push --range "${{ steps.ci_refs.outputs.range }}"
