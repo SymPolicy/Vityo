@@ -46,8 +46,13 @@ void main() {
         request.response.write(jsonEncode(<String, Object?>{'message': 'ok'}));
         await request.response.close();
       });
+      final hostedToken = 'hosted-${DateTime.now().microsecondsSinceEpoch}';
       debugOverrideHostedEnvironment(
-        _hostedEnvironmentForServer(server, basePath: '/api/styio-hosted/v1/'),
+        _hostedEnvironmentForServer(
+          server,
+          basePath: '/api/styio-hosted/v1/',
+          token: hostedToken,
+        ),
       );
       addTearDown(() => debugOverrideHostedEnvironment(null));
 
@@ -61,7 +66,7 @@ void main() {
         requests.single.path,
         '/api/styio-hosted/v1/workspaces/demo-workspace/project-graph',
       );
-      expect(requests.single.authorization, 'Bearer test-hosted-token');
+      expect(requests.single.authorization, 'Bearer $hostedToken');
       expect(requests.single.accept, 'application/json');
     },
   );
@@ -263,11 +268,13 @@ Map<String, String> _hostedEnvironmentForServer(
   HttpServer server, {
   String basePath = '/api/styio-hosted/v1',
   Map<String, String> overrides = const <String, String>{},
+  String? token,
 }) {
   return <String, String>{
     'STYIO_VIEW_HOSTED_URL':
         'http://${server.address.address}:${server.port}$basePath',
-    'STYIO_VIEW_HOSTED_TOKEN': 'test-hosted-token',
+    'STYIO_VIEW_HOSTED_TOKEN':
+        token ?? 'hosted-${DateTime.now().microsecondsSinceEpoch}',
     'STYIO_VIEW_HOSTED_WORKSPACE_ROOT': '/workspace/demo',
     'STYIO_VIEW_HOSTED_MANIFEST_PATH': '/workspace/demo/pafio.toml',
     ...overrides,

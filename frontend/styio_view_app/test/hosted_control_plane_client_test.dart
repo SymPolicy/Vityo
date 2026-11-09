@@ -49,10 +49,11 @@ void main() {
         await request.response.close();
       });
 
+      final hostedToken = 'hosted-${DateTime.now().microsecondsSinceEpoch}';
       final hostedEnvironment = <String, String>{
         'STYIO_VIEW_HOSTED_URL':
             'http://${server.address.address}:${server.port}/api/styio-hosted/v1',
-        'STYIO_VIEW_HOSTED_TOKEN': 'test-hosted-token',
+        'STYIO_VIEW_HOSTED_TOKEN': hostedToken,
         'STYIO_VIEW_HOSTED_WORKSPACE_ROOT': '/workspace/demo',
         'STYIO_VIEW_HOSTED_MANIFEST_PATH': '/workspace/demo/pafio.toml',
       };
@@ -253,7 +254,7 @@ void main() {
         'POST /api/styio-hosted/v1/workspaces/demo-workspace/execution/test',
       ]);
       expect(requestLog.map((entry) => entry.authorization).toSet(), <String?>{
-        'Bearer test-hosted-token',
+        'Bearer $hostedToken',
       });
       expect(requestLog.map((entry) => entry.accept).toSet(), <String?>{
         'application/json',
