@@ -112,7 +112,7 @@ INTENTIONAL_FIXTURE_RULES: tuple[
     (
         "products/vityo_app/test/secret_redaction_test.dart",
         "OpenAI-style API key",
-        re.compile(r"OPENAI_API_KEY\s*=|isNot\(contains\(['\"]sk-"),
+        re.compile(r"OPENAI_API_KEY\s*=|isNot\(contains\(['\"]sk-|['\"]sk-\$\{"),
         "The log-redaction test supplies or checks an inert synthetic provider key.",
     ),
     (
