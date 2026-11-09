@@ -1,8 +1,0 @@
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.idea/
-.packages
-build/
-ios/Flutter/ephemeral/
-android/.gradle/

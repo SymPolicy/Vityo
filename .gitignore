@@ -7,6 +7,14 @@
 .vscode/
 .cursor/
 
+# Local secrets and credentials
+/.env
+/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
 # Python caches and local environments
 **/__pycache__/
 *.py[cod]
@@ -24,6 +32,9 @@ venv/
 **/node_modules/
 node_modules/
 
+# Local upstream source checkouts
+/sources/
+
 # Generated artifacts and build outputs
 **/.artifacts/
 **/.dart_tool/
@@ -34,8 +45,11 @@ node_modules/
 **/.ruff_cache/
 **/.turbo/
 **/build/
+/products/vityo_app/native/vityod/target/
+/products/vityo_app/output/playwright/
 /build-*/
 **/coverage/
+/.coverage
 **/dist/
 /*.tmp
 /*.log
@@ -58,11 +72,35 @@ docs/audit/defects/
 !docs/**/tmp/**
 !docs/**/*.tmp
 !docs/**/*.log
-!frontend/styio_view_app/test/**/build/
-!frontend/styio_view_app/test/**/build/**
-!frontend/styio_view_app/test/**/build-*/
-!frontend/styio_view_app/test/**/build-*/**
-!frontend/styio_view_app/test/**/tmp/
-!frontend/styio_view_app/test/**/tmp/**
-!frontend/styio_view_app/test/**/*.tmp
-!frontend/styio_view_app/test/**/*.log
+!products/vityo_app/test/**/build/
+!products/vityo_app/test/**/build/**
+!products/vityo_app/test/**/build-*/
+!products/vityo_app/test/**/build-*/**
+!products/vityo_app/test/**/tmp/
+!products/vityo_app/test/**/tmp/**
+!products/vityo_app/test/**/*.tmp
+!products/vityo_app/test/**/*.log
+
+# Better Plan runtime lock state is host-local; never commit it.
+**/.better-plan.lock
+
+# Ephemeral browser-tool captures are host-local state.
+products/vityo_app/.playwright-cli/
+
+# Signing credentials and signature databases are never committable,
+# anywhere in the repository (hoisted from the retired frontend tree).
+**/*.keystore
+**/*.jks
+**/.sconsign.dblite
+/.impeccable/
+/reference-images/
+/artifacts/
+/docs/review/interactive-editor-input/*.png
+/docs/review/interactive-editor-input/*.jpg
+/prototype/*.png
+
+# Generated diagnostics and test-failure dumps must never enter an
+# outgoing range; they are mirrored by scripts/vityo_privacy.py exclusions.
+products/vityo_app/test/failures/
+*.trace
+*.jsonl
