@@ -1,0 +1,674 @@
+enum IdeCapabilityLayer {
+  foundation,
+  environment,
+  service,
+  interaction,
+  editor,
+  workspace,
+  runtime,
+  debugger,
+  toolchain,
+  agent,
+  extension,
+  presentation,
+}
+
+extension IdeCapabilityLayerX on IdeCapabilityLayer {
+  String get wireValue {
+    return switch (this) {
+      IdeCapabilityLayer.foundation => 'foundation',
+      IdeCapabilityLayer.environment => 'environment',
+      IdeCapabilityLayer.service => 'service',
+      IdeCapabilityLayer.interaction => 'interaction',
+      IdeCapabilityLayer.editor => 'editor',
+      IdeCapabilityLayer.workspace => 'workspace',
+      IdeCapabilityLayer.runtime => 'runtime',
+      IdeCapabilityLayer.debugger => 'debugger',
+      IdeCapabilityLayer.toolchain => 'toolchain',
+      IdeCapabilityLayer.agent => 'agent',
+      IdeCapabilityLayer.extension => 'extension',
+      IdeCapabilityLayer.presentation => 'presentation',
+    };
+  }
+}
+
+enum IdeCapabilityStatus { ready, wired, scaffolded, todo }
+
+extension IdeCapabilityStatusX on IdeCapabilityStatus {
+  String get wireValue {
+    return switch (this) {
+      IdeCapabilityStatus.ready => 'ready',
+      IdeCapabilityStatus.wired => 'wired',
+      IdeCapabilityStatus.scaffolded => 'scaffolded',
+      IdeCapabilityStatus.todo => 'todo',
+    };
+  }
+}
+
+const List<String> requiredVityoIdeCapabilityIds = <String>[
+  'foundation.datastore',
+  'foundation.registry',
+  'environment.platform',
+  'environment.file-system',
+  'environment.configuration',
+  'environment.credential-store',
+  'service.styio-language',
+  'service.semantic-snapshot',
+  'service.language-result-cache',
+  'service.remote-service',
+  'service.observable-topology',
+  'interaction.commands',
+  'interaction.diagnostics',
+  'interaction.language-service-status',
+  'interaction.search',
+  'interaction.source-control',
+  'interaction.testing',
+  'interaction.command-palette',
+  'editor.document-model',
+  'editor.rendering',
+  'workspace.project-model',
+  'workspace.diagnostics',
+  'workspace.file-explorer',
+  'workspace.edit-application',
+  'runtime.execution',
+  'runtime.terminal',
+  'debugger.dap',
+  'toolchain.manager',
+  'agent.client',
+  'agent.workbench',
+  'extension.manifest',
+  'extension.marketplace',
+  'presentation.shell',
+  'presentation.problems-panel',
+  'presentation.output-panel',
+];
+
+class IdeCapabilityDescriptor {
+  const IdeCapabilityDescriptor({
+    required this.id,
+    required this.layer,
+    required this.title,
+    required this.status,
+    required this.ownerPath,
+    this.summary = '',
+    this.todo = '',
+    this.runtimeMaturityBlocking,
+    this.references = const <String>[],
+    this.dependencies = const <String>[],
+  });
+
+  final String id;
+  final IdeCapabilityLayer layer;
+  final String title;
+  final IdeCapabilityStatus status;
+  final String ownerPath;
+  final String summary;
+  final String todo;
+  final bool? runtimeMaturityBlocking;
+  final List<String> references;
+  final List<String> dependencies;
+
+  bool get needsFollowUp =>
+      status == IdeCapabilityStatus.todo || todo.isNotEmpty;
+
+  bool get blocksRuntimeMaturity {
+    return runtimeMaturityBlocking ??
+        (status == IdeCapabilityStatus.todo ||
+            status == IdeCapabilityStatus.scaffolded);
+  }
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'id': id,
+      'layer': layer.wireValue,
+      'title': title,
+      'status': status.wireValue,
+      'ownerPath': ownerPath,
+      if (summary.isNotEmpty) 'summary': summary,
+      if (todo.isNotEmpty) 'todo': todo,
+      'runtimeMaturityBlocking': blocksRuntimeMaturity,
+      if (references.isNotEmpty) 'references': references,
+      if (dependencies.isNotEmpty) 'dependencies': dependencies,
+      'needsFollowUp': needsFollowUp,
+    };
+  }
+}
+
+class IdeCapabilityFrameworkSnapshot {
+  const IdeCapabilityFrameworkSnapshot({
+    required this.version,
+    required this.entries,
+    this.references = const <String>[
+      'VS Code workbench and extension host',
+      'IntelliJ Platform services and project model',
+      'Eclipse Theia frontend/backend split',
+      'Language Server Protocol',
+      'Debug Adapter Protocol',
+    ],
+  });
+
+  final String version;
+  final List<IdeCapabilityDescriptor> entries;
+  final List<String> references;
+
+  Iterable<IdeCapabilityDescriptor> entriesForLayer(IdeCapabilityLayer layer) {
+    return entries.where((entry) => entry.layer == layer);
+  }
+
+  Iterable<IdeCapabilityDescriptor> get followUps {
+    return entries.where((entry) => entry.needsFollowUp);
+  }
+
+  Iterable<String> get missingRequiredCapabilityIds {
+    final ids = entries.map((entry) => entry.id).toSet();
+    return requiredVityoIdeCapabilityIds.where((id) => !ids.contains(id));
+  }
+
+  Map<String, int> get statusCounts {
+    return <String, int>{
+      for (final status in IdeCapabilityStatus.values)
+        status.wireValue: entries
+            .where((entry) => entry.status == status)
+            .length,
+    };
+  }
+
+  Map<String, int> get layerCounts {
+    return <String, int>{
+      for (final layer in IdeCapabilityLayer.values)
+        layer.wireValue: entries.where((entry) => entry.layer == layer).length,
+    };
+  }
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'version': version,
+      'references': references,
+      'entryCount': entries.length,
+      'requiredCapabilityIds': requiredVityoIdeCapabilityIds,
+      'missingRequiredCapabilityIds': missingRequiredCapabilityIds.toList(
+        growable: false,
+      ),
+      'statusCounts': statusCounts,
+      'layerCounts': layerCounts,
+      'followUpCount': followUps.length,
+      'entries': entries.map((entry) => entry.toJson()).toList(growable: false),
+    };
+  }
+}
+
+class VityoIdeCapabilityFramework {
+  const VityoIdeCapabilityFramework();
+
+  IdeCapabilityFrameworkSnapshot snapshot() {
+    return const IdeCapabilityFrameworkSnapshot(
+      version: 'vityo-ide-capability-framework-v1',
+      entries: <IdeCapabilityDescriptor>[
+        IdeCapabilityDescriptor(
+          id: 'foundation.datastore',
+          layer: IdeCapabilityLayer.foundation,
+          title: 'DataStore ownership and persistence',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/foundation/datastore',
+          summary:
+              'Shared persistence base for configuration, registry, and IDE state.',
+          references: <String>[
+            'IntelliJ PersistentStateComponent',
+            'VS Code storage service',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'foundation.registry',
+          layer: IdeCapabilityLayer.foundation,
+          title: 'Cross-layer registry contract',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/foundation/registry',
+          summary:
+              'Manifest-oriented registration contract for providers, commands, and capabilities.',
+          references: <String>[
+            'VS Code contribution points',
+            'Theia contribution providers',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'environment.platform',
+          layer: IdeCapabilityLayer.environment,
+          title: 'Platform context and system compatibility',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/environment/system_compatibility',
+          summary:
+              'Platform Detector, Platform Context, Platform Adapter, and the production Platform Manager bundle are wired for file system, shell, process, resource, network, clipboard, notification, local service, and PTY services. PlatformManagerLiveOperationProbeRegistry.defaults executes nine safe native smoke operations concurrently, preserves structured probe metadata, and reports actionable failures. PlatformManagerRecoveryActionRouter maps failures into typed settings://platform routes, PlatformManagerSettingsSurface projects them into product state, and SettingsSurface renders refreshable service health with section-specific recovery controls.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code platform services',
+            'IntelliJ virtual file system',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'environment.file-system',
+          layer: IdeCapabilityLayer.environment,
+          title: 'File System Manager',
+          status: IdeCapabilityStatus.wired,
+          ownerPath:
+              'lib/src/view_ide/environment/system_compatibility/file_system',
+          summary:
+              'System specific file access base for editor binding and DataStore.',
+        ),
+        IdeCapabilityDescriptor(
+          id: 'environment.configuration',
+          layer: IdeCapabilityLayer.environment,
+          title: 'Configuration and settings storage',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/environment/configuration',
+          summary:
+              'Configuration DataStore ownership for IDE settings and toolchain preferences.',
+          references: <String>[
+            'VS Code configuration service',
+            'IntelliJ application and project settings',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'environment.credential-store',
+          layer: IdeCapabilityLayer.environment,
+          title: 'Credential DataStore',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/environment/configuration',
+          summary:
+              'Credential references, redacted metadata, injection results, batch injection, access audit trails, policy enforcement, and health facts are wired. PlatformSecureJsonCredentialStorageAdapter persists versioned records through flutter_secure_storage; PlatformSecureCredentialStorageAdapterRegistry selects verified macOS/iOS Keychain, Android encrypted storage, Windows Credential Manager-backed storage, or Linux libsecret routes. App bootstrap performs an isolated write/read/delete probe, falls back to short-lived session memory when the platform backend is unavailable, and exposes the active protection state in SettingsSurface. Plaintext FoundationDataStore credential persistence has been removed.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code SecretStorage',
+            'IntelliJ PasswordSafe',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'service.styio-language',
+          layer: IdeCapabilityLayer.service,
+          title: 'StyioService connector',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/language/service',
+          summary:
+              'Styio-first parser, diagnostics, semantic facts, grammar-version facts, runtime status snapshots, capability health summaries, StyioServiceRuntimeOutputBinding language-service health output events, extension language route consumption, and structured missing capability facts for provider binding. When a `styio_lspd` binary is discoverable the platform analysis driver runs the language service over LSP 3.17 (`lib/src/view_ide/language/lsp/`) instead of the CLI JSONL connector; document-level diagnostics, semantic tokens, document symbols, and inlay hints are wired through it, position-scoped requests remain connector-only, and formatting degrades to an honest unavailable.',
+          references: <String>['Language Server Protocol'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'service.semantic-snapshot',
+          layer: IdeCapabilityLayer.service,
+          title: 'Semantic snapshot and resolved symbols',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/language/service',
+          summary:
+              'SemanticSnapshotProvider converts StyioService analysis into resolved elements/references, exposes StyioService-backed code action raw edit facts, code action apply/result telemetry, document rename safety facts, workspace rename safety facts, diagnostics snapshot telemetry, semantic-token snapshot telemetry, SemanticSnapshotEventBridge runtime-output events, Problems/Refactor panel event sink dispatching, SemanticSnapshotPanelEventStateController, SemanticSnapshotPanelViewModel Problems/Refactor projections, concrete Problems panel projection rendering, recorded-but-not-presented Refactor telemetry (rename-safety facts stay in SemanticSnapshotPanelEventStore and are consumed by command routing, not by a dedicated shell panel), SemanticSnapshotPanelEventStore persisted telemetry with retention policy, ShellRuntimeModel lifecycle hydration, Agent context projection, StyioServiceSubscriptionController background document streams, provider daemon event stream binding, daemon lifecycle snapshots, StyioServiceDaemonRestartPolicy, StyioServiceDaemonRestartPlan, StyioServiceDaemonRestartDispatchResult, StyioServiceDaemonProcessSupervisor restart handler contract, StyioServiceDaemonProcessAdapter launch request/result contracts, StyioServiceDaemonProcessLauncherRegistry platform/service launcher selection, StyioServiceDaemonLocalProcessLauncher executable/starter bridge, StyioServiceDaemonSupervisorControls process-supervisor control path, ShellRuntimeModel subscription start/refresh/cancel/restart dispatch controls, language-service refresh callback fallback, StyioService response telemetry routing into runtime output and semantic panel events, StyioLanguageProviderReadinessReport active capability coverage, publishes a feature coverage/confidence matrix with service-backed/local-fallback/unavailable counts for hover/definition/references/completion/rename/code action consumers, and only falls back to local snapshots when service semantic facts are missing. StyioService executable discovery and process execution are routed through ToolchainManager and the vityod local service.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'LSP textDocument/semanticTokens',
+            'IntelliJ PSI and symbol resolve',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'service.language-result-cache',
+          layer: IdeCapabilityLayer.service,
+          title: 'Language result cache',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/language/service',
+          summary:
+              'Caches StyioService results with protocol, parser engine, grammar version metadata, hit/miss telemetry counters, and snapshot metadata.',
+        ),
+        IdeCapabilityDescriptor(
+          id: 'service.remote-service',
+          layer: IdeCapabilityLayer.service,
+          title: 'Remote service connector',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/backend_toolchain',
+          summary:
+              'HostedBackendController retains the active control-plane client, verifies connector reachability, applies refreshed project graphs, emits privacy-safe HostedBackendRetryRuntimeOutputBinding events, and binds retry/reopen/export/settings route contracts to the lifecycle banner and concrete Settings UI. Agent model-provider credentials and provider routing are not IDE services.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code remote authority and extension host services',
+            'Theia backend service connections',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'service.observable-topology',
+          layer: IdeCapabilityLayer.service,
+          title: 'Observable static topology',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/services/observable_topology',
+          summary:
+              'Negotiates Styio observable static snapshot schema v1, decodes producer-authored topology, caches by snapshot identity, highlights exact ID-set changes, and drives the Observable bottom-panel graph.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'docs/contracts/ObservableTopologyAdapter.md',
+            'docs/external/for-styio/Styio-Observable-Integration-Plan.md',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'interaction.commands',
+          layer: IdeCapabilityLayer.interaction,
+          title: 'IDE command catalog',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/commands',
+          summary:
+              'Registered commands for persistence, language refresh, navigation, refactor, tools, settings, debug, and extension command contribution route consumption.',
+          references: <String>[
+            'VS Code command registry',
+            'IntelliJ action system',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'interaction.diagnostics',
+          layer: IdeCapabilityLayer.interaction,
+          title: 'Diagnostics interaction surface',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/interaction',
+          summary:
+              'Diagnostics interaction can consume workspace diagnostics provider snapshots, serializable diagnostics filters, persisted panel state, panel-state restoration in ProblemsSurface, source groups, reusable diagnostics view models, quick-fix confirmation plans, WorkspaceQuickFixTelemetryStore review outcomes, WorkspaceDiagnosticsRuntimeOutputBinding producer telemetry, WorkspaceDiagnosticsProducerExecutionPlan native toolchain handoff triggers and WorkspaceDiagnosticsProducerLifecycleController progress/cancel snapshots, WorkspaceDiagnosticsProducerCancellationRoute, WorkspaceDiagnosticsProducerProcessHandleRegistry, RuntimeProcessHandleIdentity-aware WorkspaceDiagnosticsProducerProcessHandleBinder dispatch-result binding, ShellRuntime diagnostics producer cancellation bridge, Problems producer lifecycle progress/cancel controls, RuntimeOutputLiveBuffer quick-fix action telemetry, WorkspaceQuickFixReviewPlan bridges into concrete Problems diff/apply controls, focused problem actions, and keyboard-navigable Problems panel bindings. Production native-tool diagnostics preserve processHandleId/pid identity from ProcessManager through ToolchainRuntime, NativeToolCommandResult, NativeToolResultRecord, WorkspaceDiagnosticsSnapshot, and RuntimeOutputLiveBuffer metadata.',
+          runtimeMaturityBlocking: false,
+          dependencies: <String>['workspace.diagnostics'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'interaction.language-service-status',
+          layer: IdeCapabilityLayer.interaction,
+          title: 'StyioService status interaction',
+          status: IdeCapabilityStatus.wired,
+          ownerPath:
+              'lib/src/view_ide/interaction/language_service_status_surface.dart',
+          summary:
+              'LanguageServiceStatusSurface and LanguageServiceStatusController map StyioService runtime events, capability health summaries, Styio language provider readiness derived from StyioService capability snapshots, cache telemetry, syntax-validation readiness, semantic-fact readiness, and unavailable capability summaries into ValueListenable status snapshots for editor, shell, and Agent consumers.',
+          dependencies: <String>['service.styio-language'],
+          references: <String>[
+            'VS Code language status item',
+            'IntelliJ code insight daemon status',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'interaction.search',
+          layer: IdeCapabilityLayer.interaction,
+          title: 'Search, symbols, and quick open',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/ide/workspace',
+          summary:
+              'Workspace text search service, offline in-process fallback, in-memory search index snapshot, WorkspaceSearchIndexController stale-revision refresh execution, and the production ShellRuntime watcher lifecycle are wired. WorkspaceSearchIndexFileSystemWatcherBinding consumes typed FileSystemWatchOverflowException failures, publishes cumulative batch/drop/overflow telemetry to the Search Surface and RuntimeOutputLiveBuffer, performs authoritative full-index rebuilds, and reattaches the watcher with FSEvents, inotify, ReadDirectoryChangesW, or generic-provider recovery facts. Debounce/queue/ignore policy, batched refresh plans, timer-backed stream flushing, DataStore-backed recovery persistence, symbol search with semantic confidence, quick open, replace preview/apply, virtualized diff windows, persisted expansion/history/filter models, typed command routing, and match navigation remain available.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code search service',
+            'IntelliJ Search Everywhere',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'interaction.source-control',
+          layer: IdeCapabilityLayer.interaction,
+          title: 'Source control interaction',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/ide/workspace',
+          summary:
+              'Source Control is wired to dirty editor documents, Git porcelain status, diff and hunk review, destructive-action confirmations, staging action contracts, commits, branches, history, typed stage/unstage command routing, partial patch results, pending plans, and last action results. SourceControlMergeWorkflowPlan and SourceControlConflictResolutionPlan now drive a concrete three-way Merge Editor with base/current/incoming panes, editable result selection, accept-current/incoming/both semantics, per-file confirmation, dirty-editor blocking, working-revision conflict detection, constrained vityod Git stage reads, transactional workspace writes, Git resolved staging, and editor cache refresh. SourceControlHunkSelectionState, SourceControlHunkDiscardConfirmationPlan, hunk discard modal UI, shell hunk discard confirmation routing, SourceControlDiffSessionStore persistence with diff-session restore/persist hooks, SourceControlConflictResolutionProviderRegistry, non-Git provider descriptors, file open, and save-all handoff remain available.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code SCM provider API',
+            'IntelliJ VCS subsystem',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'interaction.testing',
+          layer: IdeCapabilityLayer.interaction,
+          title: 'Test explorer and results',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/testing',
+          summary:
+              'Testing surface is wired to runTests, native tool testResult records, TestRunProvider registry, TestDiscoveryProvider registry, TestingProviderCatalog controller fallback, TestingProviderCatalog health snapshots, TestingProviderRetryPlan retry action facts, test run configurations, persisted run configuration sets, run/debug selected configuration controls, test tree model, persisted test run history, persisted failed-test retry history, runtime task lifecycle snapshots, persisted runtime task history, output stream subscription plans, RuntimeOutputLiveBuffer test-result publishing, failed-test rerun planning, failed-test interaction, per-failed-test debug cancellation routing, FailedTestDebugCancellationRoute process-handle metadata, FailedTestDebugCancellationHandleRegistry debug-adapter/test-runner handle resolution, RuntimeProcessHandleIdentity-aware FailedTestDebugProcessHandleBinder runtime snapshot handle binding, rerun-failed handoff, failed-test DebugLaunchRoutePlan bridge, debug launch route plans, failure navigation actions, DebugRuntimeExecutionAdapter result visibility, cancellation telemetry, debug retry handoff, and CTest result parsing. The active production ProcessAwareTestRunProvider is backed by the toolchain manager: live vityod test process handles enter RuntimeTaskSnapshot progress events before completion, bind automatically, and cancel through CancellableProcessManager. Debug configurations execute through DapDebugAdapterExecutionPlan and DebugRuntimeExecutionAdapter, remain active for the managed DAP process lifecycle, bind as debug-adapter handles, and stop through DAP cancellation. Production DAP transports expose stable processHandleId identity through DapDebugSessionHandle, DebugRuntimeExecutionResult, launch telemetry, and cancellation planning.',
+          runtimeMaturityBlocking: false,
+          dependencies: <String>['foundation.registry', 'runtime.execution'],
+          references: <String>['VS Code Testing API', 'IntelliJ test runner'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'interaction.command-palette',
+          layer: IdeCapabilityLayer.interaction,
+          title: 'Command palette and keybinding resolver',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/commands',
+          summary:
+              'Command Palette surface is wired to VityoCommandRegistry, category contribution manifests, shell command execution, reusable query scoring, overlay selection state, live display preference updates, top-level SettingsSurface preference saves, shell-level DataStore preference hydration/persistence, app bootstrap preference hydration, category filter chips, display preferences, Settings UI preference controls, Up/Down/Enter keyboard navigation, typed input draft contracts, keyboard shortcuts, physical key capture, platform-specific reserved shortcut host policies, accessibility hints, keybinding remap persistence, surface-level keybinding editor, rich conflict review contracts and preview actions, persisted recent command ranking, recent command record hooks, and blocked command availability reasons.',
+          references: <String>[
+            'VS Code command palette',
+            'IntelliJ action search',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'editor.document-model',
+          layer: IdeCapabilityLayer.editor,
+          title: 'Document model and text buffer',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/ide/editor',
+          summary:
+              'Document state, selection, transactions, editor controller, and file binding.',
+          references: <String>['Monaco text model', 'IntelliJ document model'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'editor.rendering',
+          layer: IdeCapabilityLayer.editor,
+          title: 'Editor rendering and presentation bridge',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_render/editor',
+          summary:
+              'Editor surface renders document, tabs, selection, token/semantic/diagnostic layers, folding, hover, completion, code-action facts, language-service health status pills, EditorCodeActionWidgetState, EditorSemanticThemeBinding render styles, concrete Flutter TextSpan/TextStyle binding, EditorRenderViewportBinding concrete ScrollController facts, EditorRenderPipelinePlan renderer/fallback facts, viewport-bound source scroll telemetry, and serializable EditorRenderSnapshot contracts for UI and Agent consumers. Documents at or above 10,000 lines use the concrete flutter-fixed-extent-virtual-list backend: Flutter lazily builds fixed-extent rows over the complete document scroll range, bounds cache work, keeps transient editor panels visible as overlays, and reveals controller-driven caret navigation without replacing the user\'s free scrolling.',
+          runtimeMaturityBlocking: false,
+          references: <String>['Monaco editor', 'VS Code workbench editor'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'workspace.project-model',
+          layer: IdeCapabilityLayer.workspace,
+          title: 'Workspace and project model',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/ide/workspace',
+          summary:
+              'Workspace documents, project graph, file lists, dirty state, and samples for agent context.',
+        ),
+        IdeCapabilityDescriptor(
+          id: 'workspace.diagnostics',
+          layer: IdeCapabilityLayer.workspace,
+          title: 'Workspace diagnostics provider',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/ide/workspace/workspace_diagnostics.dart',
+          summary:
+              'WorkspaceDiagnosticsSnapshot and WorkspaceDiagnosticsProviderRegistry provide shared workspace problem facts for Problems, Agent, and code actions, including document grouping, source grouping, persisted filters, workspace diagnostic stream snapshots, WorkspaceDiagnosticsRuntimeOutputBinding output-panel events, WorkspaceDiagnosticsProducerExecutionPlan toolchain execution triggers, WorkspaceDiagnosticsProducerLifecycleController progress/cancel snapshots and registered plan lookup, diagnostics producer cancellation adapter contracts, WorkspaceDiagnosticsProducerProcessHandleRegistry provider handle resolution, WorkspaceDiagnosticsProducerProcessHandleBinder runtime dispatch-result handle binding, ToolchainRuntime process identity metadata, WorkspaceDiagnosticsController producer cancellation dispatch, runtime task cancellation metadata, attached quick-fix facts, source-kind classification, workspace quick-fix confirmation plans, WorkspaceQuickFixTelemetryStore persisted review outcomes, preview/apply action routing, and native tool result diagnostic snapshots. IO production process dispatches publish processHandleId and optional pid metadata, which remains typed and serializable across the complete diagnostics receipt path; non-process and unsupported providers do not claim a handle.',
+          dependencies: <String>[
+            'foundation.registry',
+            'service.styio-language',
+          ],
+          references: <String>[
+            'Language Server Protocol publishDiagnostics',
+            'VS Code diagnostics collection',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'workspace.file-explorer',
+          layer: IdeCapabilityLayer.workspace,
+          title: 'File explorer and workspace operations',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/ide/workspace',
+          summary:
+              'WorkspaceFileOperationService provides canonical workspace-contained create, rename, delete, and reveal contracts for both relative and absolute project path conventions. WorkspaceFileExplorerController is the single file-tree authority for the shell and command palette: it owns WorkspaceFileExplorerActionRisk classification, normalized recursive File System Manager discovery, WorkspaceFileExplorerIgnoreRules, persisted expanded/selected/revealed/sort state, canonical tree snapshots, immediate operation projection, and live watcher recovery. WorkspaceFileExplorerWatchDebouncePolicy and WorkspaceFileExplorerWatchStreamBatcher bound event delivery, while WorkspaceFileExplorerFileSystemWatcherBinding checkpoints each debounced batch instead of retaining unbounded history; WorkspaceFileExplorerWatchTelemetry records batches, event volume, consumer backpressure pauses, typed overflow counts, and dropped events. WorkspaceFileCommandRouter and WorkspaceFileCommandPaletteAdapter route typed commands through the same controller. The production explorer surface renders compact IDE rows, filtering, sort controls, dirty/open state, create and rename dialogs, multi-selection, and a non-bypassable WorkspaceFileExplorerBatchActionPlan deletion dialog with workspace-relative targets. macOS native-engine clicks plus hermetic Linux and Windows path/watcher fixtures cover the production interaction and platform boundaries.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code Explorer view',
+            'IntelliJ Project tool window',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'workspace.edit-application',
+          layer: IdeCapabilityLayer.workspace,
+          title: 'Workspace edit application',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/ide/workspace/workspace_edit.dart',
+          summary:
+              'WorkspaceEditPlan, WorkspaceEditPreview with serialized confirmation plans, WorkspaceEditDiffWindow, WorkspaceEditDiffPaginationStore, WorkspaceEditConfirmationPlan risk levels and blocking reasons, WorkspaceEditReviewControls, WorkspaceEditReviewResultTelemetry, WorkspaceEditApplyResultViewModel, file create/delete operations, Problems diff-window rendering, Problems apply-result rendering, ShellRuntime quick-fix result projection, serializable application results, and WorkspaceEditApplier provide a shared preview, confirmation, review-control, result telemetry, and edit application path for agent patches, code actions, rename, and formatting.',
+          dependencies: <String>[
+            'foundation.registry',
+            'workspace.project-model',
+          ],
+          references: <String>[
+            'Language Server Protocol WorkspaceEdit',
+            'VS Code workspace edits',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'runtime.execution',
+          layer: IdeCapabilityLayer.runtime,
+          title: 'Execution manager and shell runtime',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/environment/execution',
+          summary:
+              'ExecutionSession, runtime events, native tool results, runtime execution plans, dependency readiness checks, runtime execution handoff contracts, manager binding routes, default RuntimeExecutionManagerRegistry registrations, dispatch-to-live-output-buffer results, and RuntimeProcessHandleIdentity metadata exposure provide stable serializable execution contracts. Production vityod task starts return a stable processHandleId and operating-system pid; ProcessManager, ShellManagerRuntimeExecutionAdapter, ToolchainManagerRuntimeExecutionAdapter, ToolchainInstallRuntimeExecutionAdapter, and local ExecutionAdapter routes preserve that identity through completion and expose direct cancellation. ExecutionController publishes starting and running sessions, binds live process identity, guarantees lifecycle cleanup, and projects accepted cancellation as a cancelled result. Runtime Surface exposes accessible theme-aware Run, Stop, process identity, and final-state controls. HostedRuntimeExecutionAdapter, output-channel attachments, persisted runtime task history, extension task contributions, ExtensionRuntimeTaskExecutionPlan, ExtensionRuntimeTaskExecutionBridge, ExtensionRuntimeTaskDataStoreTelemetrySink, ExtensionRuntimeTaskRetryPolicy, ExtensionRuntimeTaskCancellationRegistry, RuntimeProcessHandleIdentity-aware ExtensionRuntimeTaskProcessHandleBinder, ExtensionRuntimeTaskTerminationRequest/Result, and ShellManager/ProcessManager cancellation adapter factories remain on the same contract. Native macOS Run/Stop clicks and process termination plus hermetic Linux and Windows execution matrices cover the production lifecycle boundaries.',
+          runtimeMaturityBlocking: false,
+          references: <String>['VS Code tasks', 'Theia task service'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'runtime.terminal',
+          layer: IdeCapabilityLayer.runtime,
+          title: 'Terminal, PTY, and task runner',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/view_ide/toolchain/terminal_runtime.dart',
+          summary:
+              'Terminal surface is wired to shell/runtime output, RuntimeOutputLiveBuffer panel snapshots, TerminalRuntimeStartPlan readiness, native forkpty/ConPTY execution plans, fail-closed ConPTY validation, native resize and signal delivery, TerminalRuntimeOutputBinding start-plan/session output snapshots, TerminalSessionRecoveryPlan replay/rebind/stale-close recovery facts, recovery action controls, TerminalInteractionController live RuntimeOutputEvent streams, RuntimeOutputProducerEmission adapter binding, ShellManager runtime output adapter bindings, line-chunked ShellCommandResult stdout/stderr events, run handoff, PTY session snapshots, explicit start/resize/signal/close UI controls, serializable interaction events, terminal-to-runtime-output event conversion, shared runtime task lifecycle snapshots on start/close, and persisted terminal task history.',
+          todo:
+              'TODO: run the fixed-version macOS and Linux product matrices before claiming those platform product capabilities complete.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code integrated terminal',
+            'IntelliJ terminal and run tool windows',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'debugger.dap',
+          layer: IdeCapabilityLayer.debugger,
+          title: 'Debug Adapter Protocol framework',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/debugger',
+          summary:
+              'DAP launch contracts, language-neutral toolchain and extension adapter profiles, workspace launch configuration selection and editing, first-line-safe breakpoint serialization and persistence, breakpoint add/edit/enable/remove controls, Foundation DataStore persistence, runtime task projection, runtime execution handoff, debug route plans, failure navigation actions, DapDebugAdapterExecutionPlan, DebugSessionTerminationPlan graceful/forced termination facts, DebugSessionTerminationExecutor DAP disconnect/terminate and production transport process-kill handling, real vityod operating-system process identities, DebugRuntimeExecutionAdapter cancellation telemetry, DebugLaunchTelemetryStore, DebugLaunchRuntimeOutputBinding output events, theme-aware DebugConsoleSurface launch, process identity, output, retry, stack, thread, and variable controls, launcher execution-plan handoff, DAP snapshot task-history binding, live ShellRuntime DAP history appends, and extension debugger route consumption share one runtime path. Native macOS Flutter clicks cover Python adapter selection, launch editing, first-line breakpoint creation, real adapter start, process identity, and confirmed force-stop; hermetic Linux Python and Windows JavaScript matrices cover cross-platform DAP launch and termination contracts.',
+          runtimeMaturityBlocking: false,
+          references: <String>['Debug Adapter Protocol'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'toolchain.manager',
+          layer: IdeCapabilityLayer.toolchain,
+          title: 'Toolchain manager',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/toolchain',
+          summary:
+              'Toolchain catalog, resolver, managed-download policy, health checks, configuration persistence, generic bootstrap summaries, install execution recovery action rendering, ToolchainBootstrapExecutionPlan settings/installer/project action steps, ToolchainBootstrapActionRouter contracts, and ToolchainBootstrapExecutionBridge dispatch now share one route. ToolchainProjectValidationRunner verifies the workspace, resolved executable presence, executable permission, and optional safe process probe before project readiness is claimed. SettingsSurface presents theme-aware status, project validation receipts, managed or external install-plan review, and explicit confirmation before execution; Clang/C++ selection and extension toolchain routes remain on the same manager. Native macOS clicks cover real project validation and confirmed installer execution, while hermetic Linux and Windows matrices cover path semantics. Styio compiler identity is consumed through its machine contract and is not installed, pinned, or switched by Pafio.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code extensions toolchain model',
+            'IntelliJ SDK model',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'agent.client',
+          layer: IdeCapabilityLayer.agent,
+          title: 'Versioned Agent Client',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/ide/agent_client',
+          summary:
+              'Supervised Agent process lifecycle, versioned protocol session negotiation, permission request stream, session reducer snapshots, context/MCP host surface, and disconnect/reconnect receipts. The IDE does not own model endpoints, provider credentials, prompt profiles, or coding-loop scheduling.',
+          references: <String>[
+            'packages/vityo_agent_protocol',
+            'Agent Client Protocol',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'agent.workbench',
+          layer: IdeCapabilityLayer.agent,
+          title: 'Agent Workbench collaboration',
+          status: IdeCapabilityStatus.wired,
+          ownerPath: 'lib/src/ide/workbench/agent_collaboration',
+          summary:
+              'Immutable bounded collaboration projections for tasks, permissions, plans, artifacts, change reviews, and verification receipts, plus presentation Workbench widgets that consume those projections only. Workspace mutation remains IDE-owned through revision-bound transactions.',
+          dependencies: <String>['agent.client', 'workspace.edit-application'],
+          references: <String>[
+            'lib/src/presentation/agent_workbench',
+            'VS Code chat participants',
+            'JetBrains AI Assistant workflows',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'extension.manifest',
+          layer: IdeCapabilityLayer.extension,
+          title: 'Extension and module manifest',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/module_host',
+          summary:
+              'Module manifests project into stable extension manifests with activation events, ExtensionActivationPlan enabled/trusted gating, typed contribution points, capability flags, registry lookup, Foundation DataStore persistence, activation history, lifecycle hooks, isolation policy, and contribution routes. ExtensionHostStartupExecutor now closes each activation from starting to running/failed through concrete conditional launcher registrations: a compiled-in host registry, vityod-managed OS processes with process identity, and browser Workers. App bootstrap preserves the execution receipt, runtime output dispatch, launch results, and transition telemetry; the Extensions surface renders an expandable Activation & Hosts inspector. Native macOS process launch/UI click evidence plus hermetic Linux/Windows and Chrome Worker tests cover the production boundaries.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code extension manifest',
+            'Theia extension model',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'extension.marketplace',
+          layer: IdeCapabilityLayer.extension,
+          title: 'Extension lifecycle and marketplace',
+          status: IdeCapabilityStatus.ready,
+          ownerPath: 'lib/src/view_ide/module_host',
+          summary:
+              'Extensions and Settings surfaces share a production ExtensionMarketplaceController for search, refresh, install/update confirmation, ExtensionMarketplaceUpdatePlan version changes, progress, module enable/disable/trust actions, and persisted lifecycle choices. Concrete platform IO handlers fetch HTTPS indexes, permit loopback HTTP only for local development, download binary packages, require verified-publisher metadata plus matching SHA-256 integrity, atomically cache artifacts inside Foundation workspace resources, persist install decisions and manifest registries, and short-circuit failed operation batches. Native macOS UI clicks exercise a real loopback download/cache/install flow; hermetic Linux and Windows matrices cover storage, policy, path, and tamper boundaries.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code extension gallery',
+            'IntelliJ plugin repository',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'presentation.shell',
+          layer: IdeCapabilityLayer.presentation,
+          title: 'IDE shell and panels',
+          status: IdeCapabilityStatus.scaffolded,
+          ownerPath: 'lib/src/view_render/shell',
+          summary:
+              'Shell model, bottom tab routing, serializable shell layout plans, ShellPanelContributionRegistry core IDE panel coverage, ShellLayoutPreferenceController live scaffold binding, ShellLayoutRenderBinding, and Foundation DataStore-backed shell layout preferences define top bar, activity rail, editor, bottom panel, active panel keys, panel visibility, pinned panels, collapsed bottom-panel state, and status bar contracts for desktop and compact viewports. Panel contribution status is derived from VityoIdeCapabilityFramework entries instead of a hardcoded production claim, and routes with no owning capability report scaffolded. The quick-open route renders a real fuzzy workspace file picker (QuickOpenSurface) and the outline route renders real document symbols (OutlineSurface); language-navigation routes without a wired surface stay scaffolded, and their commands are disabled in the registry with an explicit reason instead of opening an empty panel.',
+          todo:
+              'TODO: mature panels for diagnostics, search, settings, extensions, debug, and agent activity.',
+          runtimeMaturityBlocking: false,
+          references: <String>['VS Code workbench', 'IntelliJ tool windows'],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'presentation.problems-panel',
+          layer: IdeCapabilityLayer.presentation,
+          title: 'Problems panel',
+          status: IdeCapabilityStatus.scaffolded,
+          ownerPath: 'lib/src/view_render',
+          summary:
+              'Active document diagnostics panel is wired into the IDE shell and has workspace diagnostics grouping, source grouping, severity filter, provider contract, per-diagnostic quick-fix selection, per-fix preview/apply command routing, quick-fix confirmation planning, WorkspaceQuickFixReviewPlan preview/control contracts, concrete diff/apply controls, persisted quick-fix telemetry Shell hydration and outcome row rendering, preview, and navigation available. DiagnosticsPanelStateController persists the selected diagnostic and filter through DiagnosticsPanelStateStore, and ShellRuntimeModel restores that state into ProblemsSurface on startup. Quick-fix outcome rows are bounded to the newest six records with an explicit summary of the remainder.',
+          todo:
+              'TODO: add virtualized multi-file diff expansion and virtualized quick-fix outcome rows beyond the six-row summary.',
+          runtimeMaturityBlocking: false,
+          dependencies: <String>['workspace.diagnostics'],
+          references: <String>[
+            'VS Code Problems panel',
+            'IntelliJ Problems tool window',
+          ],
+        ),
+        IdeCapabilityDescriptor(
+          id: 'presentation.output-panel',
+          layer: IdeCapabilityLayer.presentation,
+          title: 'Output, logs, and activity panel',
+          status: IdeCapabilityStatus.scaffolded,
+          ownerPath: 'lib/src/view_render/runtime',
+          summary:
+              'Runtime Surface exposes Output Channels for runtime events, stdout, stderr, native tool activity, live output event previews, live RuntimeOutputLiveBuffer agent activity, language-service logs, debug events, serializable output channel filters, event-level output panel snapshots, reusable output channel snapshots, stream subscription plans, retention policies, RuntimeOutputProducerRegistry contracts, RuntimeOutputProducerAdapterRegistry event adapters for shell, terminal, toolchain, hosted, language-service, debug-adapter, and agent producers, RuntimeOutputProducerBindingController multi-producer live binding, RuntimeOutputLiveBuffer stream binding, ShellManagerRuntimeExecutionAdapter streams, ToolchainManagerRuntimeExecutionAdapter, ToolchainInstallRuntimeExecutionAdapter streams, HostedRuntimeExecutionAdapter streams, WorkspaceDiagnosticsRuntimeOutputBinding streams, DebugLaunchRuntimeOutputBinding streams, StyioServiceRuntimeOutputBinding streams, TerminalRuntimeOutputBinding streams, and persisted output history. ShellRuntimeModel now composes RuntimeOutputProducerBindings in the shell runtime: when the owning service is present, the agent producer binds AgentCollaborationService changes/failures, the language-service producer binds StyioServiceSubscriptionController events, and the debug-adapter producer binds DebugController.dapSnapshotEvents. Producers without a standing stream (shell-manager, terminal-runtime, toolchain-manager, hosted-executor) are recorded as blocked with a named reason, so their channels stay honestly empty rather than carrying synthesized events.',
+          todo:
+              'TODO: wire native OS PTY signal delivery telemetry, a standing PTY/toolchain/shell/hosted output stream, and production stream cancellation telemetry.',
+          runtimeMaturityBlocking: false,
+          references: <String>[
+            'VS Code Output panel',
+            'IntelliJ Run and Event Log tool windows',
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
