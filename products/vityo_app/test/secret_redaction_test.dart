@@ -38,7 +38,7 @@ void main() {
   group('LogRedactor', () {
     test('redacts common log and prompt secret shapes', () {
       final redactor = LogRedactor();
-      final fakeApiKey = 'sk-${randomFixtureValue('proj')}';
+      final fakeApiKey = randomFixtureValue('api-key');
       final bearerValue = randomFixtureValue('bearer');
       final queryToken = randomFixtureValue('query');
       final sessionValue = randomFixtureValue('session');

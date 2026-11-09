@@ -246,7 +246,7 @@ fn secret_key_redaction_preserves_non_secret_arguments() {
     let arguments =
         serde_json::from_value::<serde_json::Map<String, serde_json::Value>>(serde_json::json!({
             "query": "safe text",
-            "api_key": "secret://credential-id?audience=remote", // placeholder URI
+            "api_key": runtime_marker("api_key"), // placeholder value
             "nested": {"accessToken": runtime_marker("access")} // placeholder token
         }))
         .unwrap();
