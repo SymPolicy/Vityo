@@ -1,0 +1,233 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:vityo_app/src/view_ide/environment/environment.dart';
+import 'package:vityo_app/src/view_ide/foundation/foundation.dart';
+import 'package:vityo_app/src/view_render/view_render.dart';
+
+import 'support/test_file_system_manager.dart';
+
+void main() {
+  test('shell layout plan marks active bottom panel', () {
+    final plan = ShellLayoutPlan.forViewport(
+      activeWorkbenchRoute: BottomSurfaceTab.agent,
+      compact: false,
+    );
+    final restored = ShellLayoutPlan.fromJson(plan.toJson());
+
+    expect(plan.mode, ShellLayoutMode.desktop);
+    expect(plan.panelById('editor')?.active, isTrue);
+    expect(plan.panelById('bottom.agent')?.active, isTrue);
+    expect(plan.panelById('bottom.runtime')?.active, isFalse);
+    expect(restored.activeWorkbenchRoute, BottomSurfaceTab.agent);
+    expect(restored.visiblePanelIds, contains('activity-rail'));
+    expect(plan.renderBinding().viewportKey, 'shell-viewport-desktop');
+    expect(plan.renderBinding().activePanelId, 'bottom.agent');
+  });
+
+  test('shell layout plan records compact activity rail fallback', () {
+    final plan = ShellLayoutPlan.forViewport(
+      activeWorkbenchRoute: BottomSurfaceTab.search,
+      compact: true,
+    );
+
+    expect(plan.mode, ShellLayoutMode.compact);
+    expect(plan.panelById('activity-rail')?.visible, isFalse);
+    expect(plan.panelById('activity-rail')?.todo, isEmpty);
+    expect(plan.panelById('primary.search')?.active, isTrue);
+    expect(plan.toJson()['todo'], isNull);
+    expect(plan.renderBinding().compactActivityFallback, isTrue);
+    expect(plan.renderBinding().viewportKey, 'shell-viewport-mobile');
+    expect(plan.renderBinding().bottomPanelExpanded, isFalse);
+    expect(
+      plan.renderBinding().toJson()['visiblePanelIds'],
+      isNot(contains('activity-rail')),
+    );
+  });
+
+  test(
+    'shell layout preferences apply and persist through DataStore',
+    () async {
+      final tempRoot = await Directory.systemTemp.createTemp(
+        'vityo_shell_layout_preferences_test_',
+      );
+      addTearDown(() async {
+        if (await tempRoot.exists()) {
+          await tempRoot.delete(recursive: true);
+        }
+      });
+      final fileSystemManager = TestFileSystemManager.linuxDebianArm();
+      final resourceManager = LocalResourceManager(
+        facts: ResourceFacts.linuxDebianArm(
+          systemTempPath: tempRoot.path,
+          homePath: tempRoot.path,
+        ),
+      );
+      final dataStore = FoundationDataStore(
+        resourceCoordinator: FoundationResourceCoordinator(
+          resourceManager: resourceManager,
+          fileSystemManager: fileSystemManager,
+        ),
+        fileSystemManager: fileSystemManager,
+      );
+      final store = ShellLayoutPreferencesStore.fromDataStore(
+        dataStore: dataStore,
+      );
+      const preferences = ShellLayoutPreferences(
+        workspaceId: 'demo',
+        activeWorkbenchRoute: BottomSurfaceTab.problems,
+        hiddenPanelIds: <String>{'bottom.runtime'},
+        pinnedPanelIds: <String>{'bottom.problems'},
+        primarySidebarVisible: false,
+        primarySidebarWidth: 312,
+        bottomPanelExpanded: false,
+        bottomPanelHeight: 284,
+      );
+      final plan = ShellLayoutPlan.forViewport(
+        activeWorkbenchRoute: BottomSurfaceTab.runtime,
+        compact: false,
+      );
+
+      await store.savePreferences(preferences);
+      final restored = await store.readPreferences(workspaceId: 'demo');
+      final applied = restored.applyTo(plan);
+
+      expect(restored.activeWorkbenchRoute, BottomSurfaceTab.problems);
+      expect(applied.activeWorkbenchRoute, BottomSurfaceTab.problems);
+      expect(applied.panelById('bottom.runtime')?.visible, isFalse);
+      expect(applied.panelById('bottom.problems')?.active, isTrue);
+      expect(applied.panelById('bottom.problems')?.metadata['pinned'], isTrue);
+      expect(
+        applied.panelById('bottom.problems')?.metadata['bottomPanelExpanded'],
+        isFalse,
+      );
+      final controller = ShellLayoutPreferenceController(
+        initialPreferences: const ShellLayoutPreferences(workspaceId: 'demo'),
+      );
+      await controller.loadFromStore(store, workspaceId: 'demo');
+      final binding = controller.renderBindingForViewport(compact: false);
+
+      expect(
+        controller.preferences.activeWorkbenchRoute,
+        BottomSurfaceTab.problems,
+      );
+      expect(controller.revision, 1);
+      expect(binding.activePanelId, 'bottom.problems');
+      expect(binding.primarySidebarVisible, isFalse);
+      expect(binding.primarySidebarWidth, 312);
+      expect(binding.bottomPanelExpanded, isFalse);
+      expect(binding.bottomPanelHeight, 284);
+      expect(binding.isPanelVisible('bottom.runtime'), isFalse);
+      expect(await store.deletePreferences(workspaceId: 'demo'), isTrue);
+      expect(
+        (await store.readPreferences(workspaceId: 'demo')).activeWorkbenchRoute,
+        BottomSurfaceTab.navigate,
+      );
+    },
+  );
+
+  test('shell layout preference controller updates live render binding', () {
+    final controller = ShellLayoutPreferenceController(
+      initialPreferences: const ShellLayoutPreferences(workspaceId: 'demo'),
+    );
+
+    controller.selectWorkbenchRoute(BottomSurfaceTab.debug);
+    controller.setPanelPinned('bottom.debug', pinned: true);
+    controller.setPanelVisible('bottom.runtime', visible: false);
+    controller.setBottomPanelExpanded(false);
+    final binding = controller.renderBindingForViewport(compact: false);
+
+    expect(controller.revision, 3);
+    expect(binding.activePanelId, 'bottom.debug');
+    expect(binding.bottomPanelExpanded, isFalse);
+    expect(binding.isPanelVisible('bottom.runtime'), isFalse);
+    expect(
+      controller
+          .planForViewport(compact: false)
+          .panelById('bottom.debug')
+          ?.metadata['pinned'],
+      isTrue,
+    );
+  });
+
+  test('shell panel contribution registry covers core IDE panels', () {
+    final registry = ShellPanelContributionRegistry.defaultIdePanels();
+    final coverage = registry.coverageForCoreIdePanels();
+    final plan = ShellLayoutPlan.forViewport(
+      activeWorkbenchRoute: BottomSurfaceTab.problems,
+      compact: false,
+      panelRegistry: registry,
+    );
+
+    expect(coverage.complete, isTrue);
+    expect(
+      coverage.requiredPanelIds,
+      ShellPanelContributionRegistry.coreIdePanelIds,
+    );
+    expect(
+      registry.panelById('bottom.problems')?.capabilities,
+      contains('diagnostics'),
+    );
+    expect(
+      registry.panelById('bottom.agent')?.toJson()['surfaceId'],
+      'agent.activity',
+    );
+    expect(
+      plan.panelById('bottom.problems')?.metadata['surfaceId'],
+      'workspace.problems',
+    );
+    expect(plan.panelById('primary.extensions')?.todo, isEmpty);
+    expect(
+      registry.panelById('primary.extensions')?.status,
+      ShellPanelContributionStatus.production,
+    );
+    expect(registry.panelById('bottom.observable')?.title, 'Observable');
+    expect(
+      registry.panelById('bottom.observable')?.surfaceId,
+      'observable.graph',
+    );
+    expect(
+      registry.panelById('bottom.observable')?.capabilities,
+      containsAll(<String>['observable-topology', 'change-highlight']),
+    );
+    expect(registry.toJson()['coreIdeCoverage'], isA<Map<String, Object?>>());
+  });
+
+  test('shell panel contribution status derives from IDE capabilities', () {
+    final registry = ShellPanelContributionRegistry.defaultIdePanels();
+
+    expect(
+      registry.panelById('primary.extensions')?.status,
+      ShellPanelContributionStatus.production,
+    );
+    expect(
+      registry.panelById('primary.search')?.status,
+      ShellPanelContributionStatus.production,
+    );
+    expect(
+      registry.panelById('primary.quickOpen')?.status,
+      ShellPanelContributionStatus.production,
+    );
+    expect(
+      registry.panelById('bottom.outline')?.status,
+      ShellPanelContributionStatus.wired,
+    );
+    expect(
+      registry.panelById('bottom.runtime')?.status,
+      ShellPanelContributionStatus.scaffolded,
+    );
+    expect(
+      registry.panelById('bottom.runtime')?.metadata['capabilityId'],
+      'presentation.output-panel',
+    );
+    expect(registry.panelById('bottom.runtime')?.todo, isNotEmpty);
+    expect(
+      registry.panelById('bottom.documentLinks')?.status,
+      ShellPanelContributionStatus.scaffolded,
+    );
+    expect(
+      registry.panelById('bottom.documentLinks')?.todo,
+      contains('no IDE capability entry'),
+    );
+  });
+}

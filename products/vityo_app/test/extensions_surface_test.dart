@@ -1,0 +1,359 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:vityo_app/src/view_ide/platform/platform_target.dart';
+import 'package:vityo_app/src/view_ide/module_host/module_host.dart';
+import 'package:vityo_app/src/view_render/extensions/extensions.dart';
+import 'package:vityo_app/src/view_render/platform/platform.dart';
+
+const _fixtureSha256 =
+    '0000000000000000000000000000000000000000000000000000000000000000';
+
+void main() {
+  testWidgets(
+    'extensions surface renders module inventory and refresh action',
+    (tester) async {
+      var refreshCount = 0;
+      String? enabledModuleId;
+      String? disabledModuleId;
+      String? trustedModuleId;
+      ExtensionInstallPlan? installPlan;
+      final runtime = _module(
+        moduleId: 'runtime.panel',
+        displayName: 'Runtime Panel',
+        slot: ModuleSlot.runtimeSurface,
+      );
+      final agent = _module(
+        moduleId: 'agent.panel',
+        displayName: 'Agent Panel',
+        slot: ModuleSlot.agentSurface,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ExtensionsSurface(
+              viewportProfile: resolveViewportProfile(
+                platformTarget: PlatformTarget.macos,
+                width: 1200,
+                height: 800,
+              ),
+              visibleModules: <ModuleDefinition>[runtime, agent],
+              mountedModules: <ModuleDefinition>[runtime],
+              marketplaceIndex: const ExtensionMarketplaceIndex(
+                workspaceId: 'demo',
+                listings: <ExtensionMarketplaceListing>[
+                  ExtensionMarketplaceListing(
+                    manifest: ExtensionManifest(
+                      extensionId: 'styio.language',
+                      displayName: 'Styio Language',
+                      version: '1.0.0',
+                      publisher: 'vityo',
+                      entrypoint: 'styio_language.dart',
+                      description: 'Styio language support.',
+                      trustedByDefault: true,
+                      metadata: <String, Object?>{
+                        'isolationMode': 'local-process',
+                      },
+                    ),
+                    sourceUri:
+                        'https://marketplace.vityo.invalid/styio.language.zip',
+                    summary: 'Language support for Styio projects.',
+                    categories: <String>['language', 'styio'],
+                    verified: true,
+                    metadata: <String, Object?>{'sha256': _fixtureSha256},
+                  ),
+                ],
+              ),
+              marketplaceQuery: 'styio',
+              moduleStates: const <ModuleLifecycleState>[
+                ModuleLifecycleState(
+                  moduleId: 'runtime.panel',
+                  enabled: true,
+                  updateAvailable: true,
+                ),
+                ModuleLifecycleState(
+                  moduleId: 'agent.panel',
+                  enabled: false,
+                  trustState: ModuleTrustState.untrusted,
+                ),
+              ],
+              onRefreshModules: () async {
+                refreshCount += 1;
+              },
+              onEnableModule: (moduleId) async {
+                enabledModuleId = moduleId;
+              },
+              onDisableModule: (moduleId) async {
+                disabledModuleId = moduleId;
+              },
+              onTrustModule: (moduleId) async {
+                trustedModuleId = moduleId;
+              },
+              onInstallExtension: (plan) async {
+                installPlan = plan;
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('extensions-surface')), findsOneWidget);
+      expect(find.text('Extensions'), findsOneWidget);
+      expect(find.text('visible 2'), findsOneWidget);
+      expect(find.text('mounted 1'), findsOneWidget);
+      expect(find.text('disabled 1'), findsOneWidget);
+      expect(find.text('untrusted 1'), findsOneWidget);
+      expect(find.text('marketplace 1'), findsOneWidget);
+      expect(find.text('query styio'), findsOneWidget);
+      expect(find.text('Marketplace'), findsOneWidget);
+      expect(find.text('Styio Language'), findsOneWidget);
+      expect(find.text('ready'), findsOneWidget);
+      expect(find.text('execution ready'), findsOneWidget);
+      expect(find.text('steps 5'), findsOneWidget);
+      expect(
+        find.byKey(
+          const ValueKey('extensions-install-execution-styio.language'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('download-package ready'), findsOneWidget);
+      expect(find.text('verify-package-integrity ready'), findsOneWidget);
+      expect(find.text('Runtime Panel'), findsOneWidget);
+      expect(find.text('update'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('extensions-refresh-modules')),
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('extensions-disable-runtime.panel')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('extensions-disable-runtime.panel')),
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('extensions-install-styio.language')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('extensions-install-styio.language')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('extensions-marketplace-confirmation')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey('extensions-marketplace-confirmation-confirm'),
+        ),
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('extensions-enable-agent.panel')),
+      );
+      await tester.pump();
+      expect(find.text('Agent Panel'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('extensions-enable-agent.panel')),
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('extensions-trust-agent.panel')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('extensions-trust-agent.panel')),
+      );
+      await tester.pump();
+
+      expect(refreshCount, 1);
+      expect(disabledModuleId, 'runtime.panel');
+      expect(installPlan?.extensionId, 'styio.language');
+      expect(installPlan?.ready, isTrue);
+      expect(enabledModuleId, 'agent.panel');
+      expect(trustedModuleId, 'agent.panel');
+    },
+  );
+
+  testWidgets('extensions surface confirms a verified marketplace update', (
+    tester,
+  ) async {
+    ExtensionMarketplaceUpdatePlan? selectedUpdate;
+    final installed = ExtensionManifestRegistry(<ExtensionManifest>[
+      const ExtensionManifest(
+        extensionId: 'theme.fixture',
+        displayName: 'Fixture Theme',
+        version: '1.0.0',
+        publisher: 'vityo',
+        entrypoint: 'theme.dart',
+      ),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ExtensionsSurface(
+            viewportProfile: resolveViewportProfile(
+              platformTarget: PlatformTarget.macos,
+              width: 1200,
+              height: 800,
+            ),
+            visibleModules: const <ModuleDefinition>[],
+            mountedModules: const <ModuleDefinition>[],
+            installedExtensionRegistry: installed,
+            marketplaceIndex: const ExtensionMarketplaceIndex(
+              workspaceId: 'demo',
+              listings: <ExtensionMarketplaceListing>[
+                ExtensionMarketplaceListing(
+                  manifest: ExtensionManifest(
+                    extensionId: 'theme.fixture',
+                    displayName: 'Fixture Theme',
+                    version: '2.0.0',
+                    publisher: 'vityo',
+                    entrypoint: 'theme.dart',
+                    trustedByDefault: true,
+                  ),
+                  sourceUri:
+                      'https://marketplace.vityo.invalid/theme.fixture.bin',
+                  verified: true,
+                  metadata: <String, Object?>{'sha256': _fixtureSha256},
+                ),
+              ],
+            ),
+            onUpdateExtension: (plan) async {
+              selectedUpdate = plan;
+            },
+          ),
+        ),
+      ),
+    );
+
+    final update = find.byKey(
+      const ValueKey('extensions-update-theme.fixture'),
+    );
+    expect(update, findsOneWidget);
+    await tester.ensureVisible(update);
+    await tester.pump();
+    await tester.tap(update);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('extensions-marketplace-confirmation-confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(selectedUpdate?.canUpdate, isTrue);
+    expect(selectedUpdate?.installedVersion, '1.0.0');
+    expect(selectedUpdate?.availableVersion, '2.0.0');
+  });
+
+  testWidgets('extensions surface expands activation host telemetry', (
+    tester,
+  ) async {
+    final timestamp = DateTime.utc(2026, 8, 31, 9);
+    final plan = const ExtensionHostExecutionPlan(
+      extensionId: 'styio.language',
+      mode: ExtensionHostIsolationMode.localProcess,
+      requestedMode: ExtensionHostIsolationMode.localProcess,
+      reason: 'Trusted extension uses a managed local process.',
+    );
+    final record = ExtensionHostSupervisorRecord(
+      extensionId: 'styio.language',
+      plan: plan,
+      status: ExtensionHostSupervisorStatus.running,
+      action: ExtensionHostSupervisorAction.spawnLocalProcess,
+      message: 'Managed extension-host process started.',
+      updatedAt: timestamp,
+    );
+    final session = ExtensionActivationSession(
+      event: 'onStartup',
+      activatedAt: timestamp,
+      decisions: const <ExtensionActivationDecision>[
+        ExtensionActivationDecision(
+          extensionId: 'styio.language',
+          event: 'onStartup',
+          status: ExtensionActivationDecisionStatus.activated,
+          message: 'Extension activated.',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ExtensionsSurface(
+            viewportProfile: resolveViewportProfile(
+              platformTarget: PlatformTarget.macos,
+              width: 1200,
+              height: 800,
+            ),
+            visibleModules: const <ModuleDefinition>[],
+            mountedModules: const <ModuleDefinition>[],
+            activationSession: session,
+            supervisorSnapshot: ExtensionHostSupervisorSnapshot(
+              records: <ExtensionHostSupervisorRecord>[record],
+            ),
+            telemetryEvents: <ExtensionHostSupervisorTelemetryEvent>[
+              ExtensionHostSupervisorTelemetryEvent.fromRecord(record),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Activation & Hosts'), findsOneWidget);
+    expect(find.textContaining('1 running'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('extensions-host-styio.language')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('extensions-activation-telemetry-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('extensions-host-styio.language')),
+      findsOneWidget,
+    );
+    expect(find.text('local-process'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('extensions-activation-timeline')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+}
+
+ModuleDefinition _module({
+  required String moduleId,
+  required String displayName,
+  required ModuleSlot slot,
+}) {
+  return ModuleDefinition(
+    manifest: ModuleManifest(
+      moduleId: moduleId,
+      displayName: displayName,
+      version: '1.0.0',
+      kind: ModuleKind.optional,
+      slot: slot,
+      description: '$displayName module.',
+      enabledByDefault: true,
+      entrypoint: 'lib/main.dart',
+      distributionPolicyRef: 'local',
+      capabilityFlags: const <String, bool>{'ui': true},
+    ),
+    matrix: const ModuleCapabilityMatrix(
+      moduleId: 'test',
+      platforms: <PlatformTarget, ModuleCapabilityRule>{
+        PlatformTarget.macos: ModuleCapabilityRule(
+          supported: true,
+          visible: true,
+          installable: true,
+          mountedByDefault: true,
+          iosSafe: true,
+          distributionChannel: 'local',
+          note: 'test',
+        ),
+      },
+    ),
+  );
+}
