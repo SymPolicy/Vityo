@@ -1,0 +1,9 @@
+# Release metadata — the license-field carrier for this source
+# repository, which has no Cargo/npm manifest. The six-repo release
+# matrix and the repository audit gate's "matching package metadata"
+# requirement read `package.license` here.
+schema = 1
+
+[package]
+name = "vityo"
+license = "Apache-2.0"
