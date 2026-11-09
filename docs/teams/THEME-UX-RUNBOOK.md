@@ -2,7 +2,7 @@
 
 **Purpose:** 提供 theme、视觉系统、样式层和 UX guardrail 的日常维护入口。
 
-**Last updated:** 2026-04-23
+**Last updated:** 2026-06-24
 
 ## Mission
 
@@ -12,17 +12,21 @@
 
 Primary paths:
 
-1. `frontend/styio_view_app/lib/src/theme/`
-2. `prototype/styles.css`
-3. `prototype/editor-styles/`
-4. `prototype/theme-config.example.jsonc`
-5. `docs/specs/UX-MAINTENANCE-GUIDELINES.md`
-6. `docs/specs/OPEN-SOURCE-UI-ASSET-POLICY.md`
-7. `docs/specs/STYIO-THEME-CONFIG.md`
+1. `products/vityo_app/lib/src/view_render/theme/`
+2. `products/vityo_app/lib/src/view_render/platform/`
+3. `products/vityo_app/lib/src/theme/`
+4. `products/vityo_app/lib/src/platform/viewport_profile.dart`
+5. `prototype/styles.css`
+6. `prototype/editor-styles/`
+7. `prototype/theme-config.example.jsonc`
+8. `docs/specs/UX-MAINTENANCE-GUIDELINES.md`
+9. `docs/specs/OPEN-SOURCE-UI-ASSET-POLICY.md`
+10. `docs/specs/VITYO-THEME-CONFIG.md`
+11. `prototype/styio-*.html`
 
 Key SSOTs:
 
-1. `产品规格 -> ../design/Styio-View-Product-Spec.md`
+1. `产品规格 -> ../design/Vityo-Product-Spec.md`
 2. `UX 维护准则 -> ../specs/UX-MAINTENANCE-GUIDELINES.md`
 3. `开源 UI 资产策略 -> ../specs/OPEN-SOURCE-UI-ASSET-POLICY.md`
 
@@ -32,8 +36,11 @@ Key SSOTs:
 2. 所有窄屏、侧栏、抽屉和弹窗变更，都要先检查内部组件是否溢出父容器。
 3. 若同一视觉系统同时作用于 Flutter 主壳和手写原型，先明确 canonical token/source 在哪一边，再同步另一边。
 4. 视觉变更不应绕过产品语义或 adapter 边界；必要时拉对应消费团队一起 review。
-5. `StyioThemeOverride` 只冻结最小 theme token override、JSON round-trip 和 Material color binding；本轮不新增完整主题编辑器、远程 profile sync 或用户市场主题。
+5. `VityoThemeOverride` 只冻结最小 theme token override、JSON round-trip 和 Material color binding；本轮不新增完整主题编辑器、远程 profile sync 或用户市场主题。
 6. 默认 palette、font size、chip/button/card constraints 变化必须通过 Flutter widget tests 或明确的视觉验收说明确认，不把产品 gate 截图测试写成默认必过项。
+7. `prototype/styio-*.html` 只作为 `style-experiment` 视觉参考存在；新增或删除这些页面时，必须同步 `prototype/prototype-manifest.json`，并且不得在样式实验里新增产品语义、workspace mutation 或 dev-server API 合同。
+8. Flutter theme 和 viewport profile 的实现归 `view_render/theme` 与 `view_render/platform`；legacy `src/theme/` 和 `src/platform/viewport_profile.dart` 只能做兼容导出。
+9. Theme persistence 和 prototype style 变更只能改变视觉 token、布局约束或呈现状态；不得在 `prototype/styles.css` 或 theme façade 中塞入编辑、runtime、agent 或 workspace 语义。
 
 ## Change Classes
 
@@ -46,14 +53,16 @@ Key SSOTs:
 Minimum:
 
 ```bash
+cd prototype && npm run governance
 cd prototype && npm run selftest:editor
-cd frontend/styio_view_app && flutter analyze && flutter test
+cd products/vityo_app && flutter analyze && flutter test
 ```
 
 ## Cross-Team Dependencies
 
 1. Shell / Editor 必须 review 影响编辑器层级、focused editor 或 language inspector 的视觉变更。
-2. Runtime / Agent 必须 review 影响 runtime/debug/agent panel 结构的视觉变更。
+2. Runtime / Agent Client must review visual changes that affect runtime, debug, or Agent
+   Workbench structure. `Agent Panel` may remain a concrete view label only.
 3. Docs / Delivery 必须 review UX 文档、handbook 或视觉基线记录更新。
 4. Module / Platform 必须 review 平台 profile 或 capability 展示层变化。
 

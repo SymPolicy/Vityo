@@ -1,0 +1,88 @@
+# Architecture Runbook
+
+**Purpose:** Define the architecture domain owner's responsibilities, owned paths, review checklist, and required gates for Vityo system architecture governance.
+
+**Last updated:** 2026-10-03
+
+## Mission
+
+Own the overall Styio system architecture: layer boundaries, import rules, adapter contract schemas, architecture alignment with mainstream IDE patterns, architecture decision records (ADRs), and the implemented-decision summary. Enforce that `view_ide` does not import Flutter presentation, Coding Agent stays independent of IDE/Flutter implementation, and cross-product messages use the shared protocol.
+
+## Owned Surface
+
+Primary paths:
+1. `docs/design/Vityo-Mainstream-Architecture-Alignment.md`
+2. `docs/design/Vityo-System-Architecture.md`
+3. `docs/design/Vityo-Protocol-And-Capability-Negotiation.md`
+4. `docs/design/Vityo-Extension-And-Contribution-Model.md`
+5. `docs/design/Vityo-Agent-Native-IDE-Architecture.md`
+6. `docs/adr/`
+7. `docs/teams/ARCHITECTURE-RUNBOOK.md`
+8. `docs/governance/`
+9. `CODEOWNERS`
+10. `scripts/check_architecture_boundaries.py`
+11. `scripts/check_product_line_boundaries.py`
+
+Key SSOTs:
+1. `架构对齐 -> ../design/Vityo-Mainstream-Architecture-Alignment.md`
+2. `系统架构 -> ../design/Vityo-System-Architecture.md`
+3. `协议协商 -> ../design/Vityo-Protocol-And-Capability-Negotiation.md`
+4. `API 兼容性 -> ../governance/API-COMPATIBILITY.md`
+5. `供应链安全 -> ../governance/SECURITY-AND-SUPPLY-CHAIN.md`
+6. `已实现决策摘要 -> ../adr/IMPLEMENTED-DECISIONS.md`
+
+## Daily Workflow
+
+Flow Hero consumes the registered Agent operation/lifecycle contract, platform launch-path
+facade, workspace document contract, and platform workspace-store factory. Concrete
+platform adapters stay behind that factory; transaction failures live in the public
+document contract. Those entrypoints retain ownership in the IDE/daemon layers;
+their registration does not allow arbitrary IDE implementation imports or Agent runtime
+ownership in presentation.
+
+1. Review PRs touching architecture-owned paths against the review checklist.
+2. Run `python3 scripts/check_architecture_boundaries.py` on any `view_ide` / `view_render` changes.
+3. Ensure new public models have schemaVersion fields.
+4. Ensure new adapter payloads have capabilities maps and unknown field tolerance.
+5. Verify no competitor brand names enter UI-visible strings.
+6. Create standalone ADRs only for significant architectural decisions that still need direct review.
+7. When a decision is implemented and absorbed by code and owner SSOTs, compress the durable result into `docs/adr/IMPLEMENTED-DECISIONS.md` instead of leaving a stale plan or one-off ADR trail.
+8. Keep Vityo as one product with an IDE delivery track, a first-party companion-runtime track, and
+   a shared protocol boundary; never recreate removed forwarding roots or dual product identities.
+9. Reject model/provider, tool-loop, durable-session, or multi-Agent orchestration ownership in the
+   IDE. Reject direct IDE workspace mutation by an Agent runtime.
+
+## Change Classes
+
+1. Small: New model/contract in existing domain, minor doc update. Run architecture boundary gate and flutter analyze.
+2. Medium: New architecture doc, new ADR, implemented-decision summary update, new governance rule, layer boundary adjustment. Run full gate suite plus docs gate.
+3. High: Layer boundary redefinition, major schema version bump, breaking contract change. Requires ADR or implemented-decision replacement, team review, and migration guide.
+
+## Required Gates
+
+Minimum:
+```bash
+python3 scripts/check_architecture_boundaries.py
+python3 scripts/check_product_line_boundaries.py
+python3 scripts/ide-product-parity-gate.py
+python3 scripts/vityo-product-gate.py --mode checkpoint
+cd products/vityo_app && flutter analyze
+python3 scripts/repo-hygiene-gate.py --mode tracked
+```
+
+## Cross-Team Dependencies
+
+1. Agent team must review agent architecture changes.
+2. Module team must review extension/contribution model changes.
+3. Adapter contracts team must review protocol and capability negotiation changes.
+4. Editor/shell team must review view_ide/view_render boundary changes.
+5. Governance team must review security and API compatibility changes.
+
+## Handoff / Recovery
+
+Record:
+1. Which architecture docs were updated.
+2. Which ADRs were created, superseded, or compressed into `IMPLEMENTED-DECISIONS.md`.
+3. Which layer boundaries were adjusted.
+4. Which gates were updated.
+5. Next recovery point and pending architectural decisions.

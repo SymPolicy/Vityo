@@ -1,0 +1,520 @@
+# Vityo Security and Supply Chain Policy
+
+**Purpose:** Define security and supply-chain rules across the Vityo IDE, the shared Agent protocol, and compatible Agent runtimes.
+
+**Owner:** Governance owner (`CODEOWNERS` → governance domain)
+**Last updated:** 2026-10-03
+
+---
+
+## 1. Credential Safety
+
+### 1.1 Rule: No Raw API Keys in Storage
+
+**CRITICAL:** Raw API keys, tokens, passwords, or other credentials MUST NOT be stored in:
+
+- Source code files
+- Configuration files (`.json`, `.yaml`, `.env` committed to repo)
+- Shared preferences or local storage without encryption
+- Agent settings files
+- Test fixtures (use placeholder values)
+
+### 1.2 Credential References
+
+Instead of raw values, use **credential references**. The Rust Coding Agent configuration
+stores only a native credential-service reference; it does not accept an environment-variable
+name or credential value:
+
+```json
+{
+  "auth": {
+    "mode": "bearer_token",
+    "secretRef": {
+      "service": "vityo-coding-agent",
+      "account": "provider-profile"
+    }
+  }
+}
+```
+
+The Agent resolves this service/account reference through the native credential store. Raw
+credentials MUST NOT appear in provider JSON, arguments, protocol messages, diagnostics, logs, or
+durable events. See [Agent Provider Configuration](../specs/AGENT-PROVIDER-ADAPTER-SCHEMA.md) for
+the complete non-secret contract.
+
+### 1.3 Display Redaction
+
+All UI surfaces that display settings or context MUST redact:
+- Credential values → `[REDACTED]`
+- Credential references → `[SECRET]`
+- Home directory paths → `$HOME/...`
+- User-specific paths → `[USER_PATH]/...`
+
+Reference implementations include `log_redactor.dart`, `secret_store.dart`, and the Agent context
+projection code. Any IDE display surface must use a redacted protocol projection. Model/provider
+configuration and credentials belong to the Agent runtime and must not be copied into IDE-owned
+profiles or workspace state.
+
+## 2. Agent Permission Boundaries
+
+### 2.0 Ownership
+
+The product-ownership boundary follows [ADR-0019](../adr/ADR-0019-vityo-is-the-styio-agent-native-ide.md),
+and the Agent-neutral host-operation boundary follows
+[ADR-0022](../adr/ADR-0022-agent-neutral-operation-boundary.md):
+
+1. The Agent runtime owns model/provider credentials, tool catalogs and execution, policy
+   evaluation, permission-grant persistence, durable session journals, and multi-Agent delegation.
+2. Vityo owns the workspace root and revision, context-export scope, permission-request
+   presentation, the user's decision, change preview, and workspace transaction enforcement.
+3. `packages/vityo_agent_protocol` carries requests, decisions, proposals, events, and receipts.
+   It does not confer direct workspace access.
+4. The IDE-side provider, prompt/tool-loop, policy, and durable-session implementations have been
+   removed. The remaining IDE tool policy is only the authority for IDE-exported MCP tools and
+   resources; it is not an Agent-runtime policy store.
+
+### 2.1 Permission Decisions
+
+The IDE preserves the permission options supplied by the Agent. Each ACP option has exactly
+`optionId`, `name`, and `kind`: Vityo displays the supplied name, treats the kind as a UI hint, and
+returns the exact selected `optionId` in the correlated response. The four standard kinds are
+`allow_once`, `allow_always`, `reject_once`, and `reject_always`; the UI may present only valid
+options actually offered for that request.
+
+The Agent that supplied the options interprets the selected ID and owns any resulting one-shot or
+persistent grant behavior, durable grant storage, and revocation. The kind remains a UI hint; the IDE
+does not infer the decision from it, translate an option into its own Agent-runtime grant, or
+maintain a second Agent permission engine. IDE-exported MCP tools remain governed separately by
+section 2.5. This boundary adds no Agent-grant TTL or IDE-side Agent-grant management store; the
+expiry rules in section 2.5 apply only to IDE-exported MCP tools.
+
+### 2.2 Permission And Effect Audit
+
+Every IDE MCP tool effect must produce a bounded `ToolAuditReceipt` with session, tool, outcome,
+risk set, root revision, workspace revision, and provenance. Every Agent-runtime effect must produce
+its runtime-owned effect receipt and redacted durable session event. Permission elevation requires
+an explicit correlated decision; model text and tool declarations are never enforcement authority.
+
+### 2.3 Network Safety
+
+- Agent-runtime provider connections must use TLS.
+- The selected Rust provider transport is `reqwest` with the native TLS backend; production provider
+  configuration rejects non-HTTPS endpoints.
+- Agent-runtime tool calls requiring network must declare `network` scope.
+- Network requests from Agent tools require declared `network` scope and honor explicit task
+  budgets and cancellation; the runtime does not impose an arbitrary fixed task timeout.
+- Vityo must not make model-provider network requests.
+
+### 2.4 Protocol Permission Boundary
+
+The stable IDE boundary is implemented by
+`products/vityo_app/lib/src/ide/agent_client/agent_client_registry.dart`,
+`products/vityo_app/lib/src/ide/workbench/agent_collaboration/`, and
+`products/vityo_app/lib/src/presentation/agent_workbench/`.
+
+Required invariants:
+
+1. Client-facing permission IDs are generated by Vityo and retain exact Agent, process-generation,
+   and client-session ownership; remote JSON-RPC IDs are never exposed as global identities.
+2. Duplicate pending JSON-RPC request IDs, unknown sessions, malformed or unsupported option
+   kinds, malformed payloads, and request-limit overflow fail closed. A selected option must match
+   one of the exact IDs supplied with the pending request.
+3. A decision is removed from pending state only after the correlated response is sent.
+4. Process failure or terminal session state clears pending permissions; late queued permissions
+   cannot reappear in a terminal projection.
+5. Displayed payloads and diagnostics remain bounded and redacted.
+
+### 2.5 IDE MCP Tool Authority
+
+IDE-exported facts and tools are governed by
+`products/vityo_app/lib/src/ide/agent_client/mcp/`,
+`products/vityo_app/lib/src/ide/agent_client/tools/`, and the IDE workspace transaction service.
+
+Required invariants:
+
+1. Roots are explicit, revisioned, canonicalized, revocable, and checked again before every effect.
+2. Tool schemas are validated before execution; unknown or currently invisible tools are denied.
+3. Grants are scoped by session, tool, risk, optional root, expiry, and grant lifetime.
+4. Credential-shaped input is rejected or redacted before execution and receipts.
+5. Tool results and audit history are bounded; mutation authority remains with IDE-owned services.
+
+### 2.6 Agent Runtime Tool Policy
+
+Agent runtime policy and execution are owned by the independent Rust Coding Agent under
+`products/vityo_coding_agent/src/`. The IDE presents the Agent's permission options and forwards
+the user's exact choice; it does not own Agent runtime policy or grants.
+
+Required invariants:
+
+1. Tool descriptors have versioned bounded schemas, one declared risk, and explicit path, network,
+   and secret arguments when applicable.
+2. Invalid policy versions, disallowed risks, raw credentials, audience mismatch, unapproved
+   network hosts, path traversal, and root escape are denied.
+3. A current session/tool/risk/root grant is required for an effect.
+4. Unknown tools, stale catalogs, oversized results, and adapter failures return structured,
+   redacted failures.
+
+### 2.7 Durable Journals And Replay
+
+Durable Agent journals, redaction, recovery, permission grants, and effect receipts are owned by the
+independent Rust Coding Agent in `products/vityo_coding_agent/src/sessions/` and
+`products/vityo_coding_agent/src/policy/`.
+
+Required invariants:
+
+1. Session events are append-only, sequence checked, size bounded, and redacted before persistence.
+2. Replay is bounded and marks receipts with `replayedFromJournal`.
+3. Corrupt, truncated, oversized, or out-of-order journal input fails closed with structured
+   recovery status.
+4. IDE Workbench history is a bounded projection and never becomes durable Agent truth.
+
+### 2.8 Workspace Change Authority
+
+Standard `fs/write_text_file` remains a caller-observed revision compare-and-swap operation. When a
+change requires explicit review, the Agent uses the correlated
+`_vityo.dev/workspace-change-proposal` protocol extension. The IDE presents the actual diff for an
+explicit Apply or Reject decision; the decision is correlated to the pending proposal and does not
+trigger a duplicate generic permission prompt for the same effect. Preview never mutates source.
+Apply uses the existing workspace transaction and compare-and-swap revision checks. The request
+returns an explicit `committed`, `rejected`, `conflict`, or `failed` result; only a real committed
+daemon transaction includes its resulting revision. No other outcome is reported as applied.
+Reused change-set IDs with different content, stale revisions, overlap, malformed ranges, and limit
+overflow fail without partial mutation.
+
+### 2.9 ACP Attachment Boundary
+
+The first-party Rust process exposes ACP over stdio and supports the wired filesystem, terminal,
+permission, and Vityo proposal operations. The Rust MCP client library and tool adapters do not
+provide a production ACP attachment lifecycle: ACP `session/new` and `session/load` reject
+non-empty `mcpServers` with JSON-RPC error `-32003`; an empty list is accepted. Do not claim that a
+configured MCP server is connected or silently treat an unsupported attachment as available.
+
+### 2.10 Process And Session Failure Isolation
+
+The selected Flow Hero process descriptor is created only when a non-empty `VITYO_WORKSPACE` is
+explicitly supplied. Without that scope, the route remains in demo mode and launches no Agent
+process. Bind each session and its grants to the selected workspace; do not infer a default root or
+reuse grants across workspace bindings.
+
+Agent processes run with a minimal environment and bounded stdio framing. Concurrent connection
+attempts for one Agent share one launch; remote session IDs are scoped by Agent and generation and
+cannot overwrite an active route. Shutdown is idempotent, time bounded, escalates when graceful
+exit fails, and drains stream resources once. One failed Agent or session cannot close a sibling,
+mutate editor state, retain an actionable permission, or leak raw stderr/runtime data.
+
+## 3. Dependency Provenance
+
+### 3.0 Automated Update Coverage
+
+Dependabot is configured in `.github/dependabot.yml` for:
+
+- GitHub Actions workflows at `/`
+- Flutter/Dart `pub` dependencies at `/products/vityo_app`
+- Cargo dependencies at `/products/vityo_coding_agent` and `/products/vityo_app/native/vityod`
+- npm prototype dependencies at `/prototype`
+
+Dependabot PRs are review inputs, not automatic policy approval. Dependency additions still require `DEPENDENCY-USAGE.md` license/source/usage evidence before merge.
+
+### 3.1 Flutter/Dart Dependencies
+
+- All `pubspec.yaml` dependencies must be from `pub.dev` or verified Git sources.
+- `pubspec.lock` must be committed and reviewed on dependency changes.
+- `flutter pub outdated` should be run periodically; critical security updates applied promptly.
+
+### 3.2 Node.js Dependencies (Prototype)
+
+- All `package.json` dependencies must be from npm registry with verified integrity hashes.
+- `package-lock.json` must be committed.
+- `npm audit` must pass without critical/high findings in CI.
+
+### 3.3 Python Dependencies (Scripts)
+
+- Python scripts should use only stdlib or widely-trusted packages.
+- If third-party packages are needed, they must be declared with pinned versions.
+
+### 3.4 Rust Dependencies
+
+- Commit and review each workspace's `Cargo.lock` with manifest changes; the Coding Agent and
+  `vityod` are separate Cargo workspaces.
+- Register every direct external Cargo dependency in `DEPENDENCY-USAGE.md`, including workspace
+  member, target-specific, development, and build dependencies. First-party path dependencies are
+  governed by repository ownership and licensing, not third-party registration.
+- Evaluate the union of locked dependency graphs reachable for supported desktop targets (Linux
+  x86_64 GNU, Windows x86_64 MSVC, and macOS x86_64/aarch64), including direct, transitive,
+  target-specific, development, and build dependencies. Direct registration does not waive
+  transitive license review; unsupported-only target edges do not expand the accepted license set.
+- Generate and package third-party notices from the locked graphs with the pinned `cargo-about`
+  tool. Preserve each dependency's applicable license text and attribution.
+
+### 3.5 Dependency Registration Gate
+
+`scripts/dependency-policy-gate.py` enforces direct dependency registration for every dependency
+declared in the maintained Flutter/Dart, prototype npm, and Cargo workspace manifests. Cargo
+metadata covers workspace members, target-specific, development, and build dependencies without
+expanding transitive packages. SDK dependencies are exempt without explicit registration. The
+gate exits non-zero when a direct dependency is unregistered.
+
+CI must wire this gate through `.github/workflows/audit.yml` or `.github/workflows/repo-hygiene.yml`.
+
+## 4. SBOM and Release Readiness
+
+### 4.1 SBOM Entry Point
+
+`DEPENDENCY-USAGE.md` is the lightweight SBOM evidence surface for the current repository. It records runtime, dev, prototype, CI/toolchain, license, source boundary, and usage boundary evidence. The release readiness gate (`scripts/release-readiness-gate.py`) and supply-chain governance gate (`scripts/supply-chain-governance-gate.py`) validate that this evidence remains present.
+
+- Dependency inventory (Flutter/Dart, Cargo, Node, Python)
+- License inventory (every dependency in the supported-target locked graphs must have a permissible license)
+- Generated artifact boundaries (what binary/image/asset is produced and from what source)
+
+### 4.2 License Policy
+
+- Permissible licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unlicense, Zlib, Unicode-3.0
+- Review-required: LGPL-2.1, LGPL-3.0, MPL-2.0
+- Prohibited: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0, SSPL, BUSL-1.1, and any other non-OSI or non-permissive license.
+
+Review-required and prohibited license checks are enforced by `scripts/check_license_policy.py`. License evidence for each dependency is recorded in `DEPENDENCY-USAGE.md`.
+`Zlib` and `Unicode-3.0` are reviewed permissive SPDX identifiers present in supported-target
+locked Rust dependency graphs; their notice and attribution obligations remain in force ([SPDX
+Zlib](https://spdx.org/licenses/Zlib.html), [SPDX Unicode-3.0](https://spdx.org/licenses/Unicode-3.0.html)).
+The direct dependency table is a registration inventory; the Rust license gate checks the supported
+target graphs and `cargo-about` generates complete notices for their dependencies.
+Unknown identifiers remain unapproved, and existing review-required and prohibited classes are
+unchanged.
+
+## 5. Extension And Module Security
+
+### 5.1 Extension Permissions
+
+Vityo extensions (modules) must declare their capabilities and isolation mode. The extension host enforces:
+- `in-process`: compiled-in, trusted modules from the bundled registry only
+- `local-process`: trust-policy validation followed by vityod-managed launch
+- `web-worker`: browser Worker origin and CSP enforcement
+- `remote-service`: explicit client registration, network permission, and TLS
+- unknown or unsupported isolation values: blocked without fallback
+
+### 5.2 Extension Vetting
+
+Before activation, extensions are checked for:
+- Valid manifest schema
+- Known vulnerability database match
+- License compatibility
+- Permission reasonableness (e.g., a theme extension requesting `network` is suspicious)
+
+Marketplace installation additionally requires:
+- An explicitly configured HTTPS index endpoint; cleartext HTTP is accepted
+  only for loopback development traffic.
+- Marketplace publisher verification metadata and a valid SHA-256 digest.
+- A byte-for-byte digest match before atomic workspace-cache persistence.
+- Short-circuiting on download, integrity, cache, or lifecycle persistence
+  failure so an unverified manifest is never registered.
+
+### 5.3 Module Manifest Security Baseline
+
+`products/vityo_app/lib/src/view_ide/module_host/module_manifest_security.dart` owns trust checks for module manifests. Manifest security changes must preserve:
+
+1. Schema validation before activation.
+2. Deny-by-default behavior for unknown privileged capabilities.
+3. Explicit permission rationale for network, process, workspace write, and toolchain execution.
+4. A test covering malicious, malformed, or oversized manifest payloads when validation behavior changes.
+
+Governed invariants in `ModuleManifestSecurityPolicy`:
+- `allowedPermissions`: `file.read`, `file.write`, `process.exec`, `network`, `secret.read`, `module.install`, `cloud.upload`, `terminal.interactive`
+- `allowedChannels`: `stable`, `preview`, `nightly`
+- Validation produces `ModuleManifestSecurityCode` for each failure category (missing field, invalid identifier, invalid version, invalid permission, checksum mismatch, signature missing/invalid, platform unsupported, etc.)
+- Valid manifests produce `ModuleManifestSecurityStateStatus.trusted`; invalid manifests produce `quarantined` with rollback support.
+
+## 6. Execution Sandbox
+
+### 6.1 Sandbox Contract
+
+`products/vityo_app/lib/src/view_ide/environment/execution/execution_sandbox.dart` owns local execution policy. Security-critical execution must:
+
+1. Build commands from argv arrays, not string concatenation.
+2. Avoid shell mode for security-critical paths.
+3. Apply workspace, environment, timeout, and permission scopes before process launch.
+4. Redact command output before it is logged or exposed to agent context.
+5. Return structured denial reasons instead of falling back to unrestricted execution.
+
+Governed invariants in `ExecutionSandboxPolicy`:
+- `workspaceRoot`: Root directory for containment checks.
+- `trustState`: `trusted` or `restricted` — restricted workspaces block write/network auto-execution.
+- `approvalPolicy`: `readOnly`, `workspaceWrite`, `trustedFullAccess`.
+- `networkPolicy`: `denied`, `workspaceEndpointsOnly`, `allowed`.
+- `allowedEnvironmentKeys`: Key allowlist — environment entries with keys outside the allowlist are rejected.
+- `allowedCwdPrefixes`: CWD must be within one of the allowed prefixes (or unrestricted when empty).
+- `knownSymlinkPaths`: CWD below a known symlink path is blocked (symlink escape protection).
+- `timeout`, `maxStdoutBytes`, `maxStderrBytes`: Bounded resource consumption.
+
+Structured failure modes (`ExecutionSandboxFailureCode`):
+`untrustedWorkspace`, `approvalRequired`, `commandRejected`, `cwdOutsideWorkspace`, `pathTraversal`, `symlinkEscape`, `envRejected`, `timeoutInvalid`, `outputLimitInvalid`, `networkBlocked`.
+
+Each failure includes a `message`, `recoveryAction`, `developerDetail`, and `correlationId` for traceability.
+
+### 6.2 Secret Store And Log Redaction
+
+`secret_store.dart` owns credential references and local secret lookup. `log_redactor.dart` owns redaction before logs, diagnostics, runtime output, or agent context are displayed.
+
+`LogRedactor` governed invariants:
+1. Pattern-based redaction for: Authorization headers (Bearer/Basic), API key query parameters, JSON key-value secrets, Bearer tokens, `sk-*` OpenAI-style keys, `github_pat_*` tokens, `ghp_*`/`gho_*`/`ghu_*`/`ghs_*`/`ghr_*` tokens, email addresses, POSIX home paths (`/Users/*`, `/home/*`), Windows user paths (`C:\Users\*`), and session IDs.
+2. Recursive JSON redaction via `redactJson()` and `redactValue()` — scalar fields matching sensitive key patterns (`authorization`, `apikey`, `token`, `secret`, `password`, `privatekey`, `cloudsessionid`, `hostedsessionid`, etc.) are replaced with `redactedValue` (`<redacted>`).
+3. Non-sensitive field-name exceptions: `EnvironmentName`, `focusToken`, `semanticToken`, `tokenKind` are not redacted.
+
+No change may move raw credential values into serialized settings, workspace files, test fixtures, module manifests, or agent journals.
+
+## 7. Build and CI Security
+
+### 7.1 CI Workflow Security
+
+- GitHub Actions workflows use pinned action versions with commit hashes.
+- Every workflow action is SHA-pinned, and CI runs `scripts/github-actions-pin-gate.py --mode enforce` to prevent tag-based references from returning.
+- Every workflow must declare top-level minimum permissions. The default baseline is `permissions: contents: read`; write scopes require explicit review.
+- `pull_request_target` is disabled by policy for repository workflows.
+- Secrets are passed via GitHub Secrets, never hardcoded.
+- Build artifacts are scanned before deployment.
+
+### 7.2 Executable Governance Gates
+
+CI must keep these checks wired through `.github/workflows/audit.yml` or `.github/workflows/repo-hygiene.yml`:
+
+- `scripts/supply-chain-governance-gate.py` — workflow permissions, Dependabot coverage, SBOM evidence, secret ignore baseline, high-signal secret scan.
+- `scripts/dependency-policy-gate.py` — direct Flutter/Dart, Cargo, and prototype npm dependency registration in `DEPENDENCY-USAGE.md`.
+- `scripts/vityo_rust_notices.py` — full locked Cargo graph license evaluation and third-party notice generation.
+- `scripts/github-actions-pin-gate.py` — action SHA-pinning audit/enforcement.
+- `scripts/check_security_baseline.py` — security-critical implementation baseline (required file existence, forbidden pattern scan).
+- `scripts/check_license_policy.py` — package allowlist and forbidden license marker checks.
+
+### 7.3 Local Development Security
+
+- `.env` files and local secrets are in `.gitignore`.
+- Pre-commit hooks enforce credential scanning (`scripts/repo-hygiene-gate.py`).
+- `git secrets` or similar should be configured locally.
+
+### 7.4 Security Baseline Gate
+
+Run:
+
+```bash
+python3 scripts/check_security_baseline.py
+```
+
+Required security files (must exist):
+- `products/vityo_app/lib/src/view_ide/environment/execution/execution_sandbox.dart`
+- `products/vityo_app/lib/src/view_ide/environment/configuration/log_redactor.dart`
+- `products/vityo_app/lib/src/view_ide/environment/configuration/secret_store.dart`
+- `products/vityo_app/lib/src/view_ide/module_host/module_manifest_security.dart`
+- `products/vityo_app/lib/src/ide/agent_client/agent_client_registry.dart`
+- `products/vityo_app/lib/src/ide/agent_client/mcp/vityod_mcp_gateway.dart`
+- `products/vityo_app/native/vityod/crates/vityod-agent-host/src/acp.rs`
+- `products/vityo_app/lib/src/ide/workspace/workspace_transaction_service.dart`
+- `packages/vityo_agent_protocol/lib/src/protocol.dart`
+
+Forbidden patterns in security-critical files:
+- Silent `catch (_)` — must not silently swallow exceptions.
+- `runInShell: true` — security-critical execution must not opt into shell mode.
+- String concatenation in `Process.run`/`Process.start` — must use argv arrays.
+- Literal `Authorization: Bearer` or `Authorization: Basic` headers — must use credential references.
+- `sk-*` API key-like literals — must use credential references.
+
+## 8. Owned Artifacts And Product Boundaries
+
+### 8.1 Governed File Inventory
+
+Every file below participates in the security, permission, audit, or supply-chain boundary. Changes to these files must be reviewed against this policy document and the Code Audit Checklist.
+
+| File | Purpose | Boundary |
+|------|---------|----------|
+| `packages/vityo_agent_protocol/` | Versioned IDE/Agent messages | Requests, decisions, events, proposals, and receipts |
+| `products/vityo_coding_agent/src/policy/` | Rust Agent policy and durable permission grants | Tool authority, least privilege, grant lifecycle |
+| `products/vityo_coding_agent/src/tools/` | Rust Agent tool catalog and executor | Tool validation, execution, bounds, and results |
+| `products/vityo_coding_agent/src/sessions/` | Rust Agent sessions, journal, and effect receipts | Replay/recovery, grant persistence, redacted evidence |
+| `products/vityo_coding_agent/src/hosts/acp.rs` | First-party ACP stdio host | Session lifecycle, negotiated operations, explicit MCP attachment rejection |
+| `products/vityo_app/lib/src/ide/agent_client/agent_client_registry.dart` | Thin IDE gateway and immutable projection | Typed daemon requests, permission presentation, reconnect coalescing, and bounded failure isolation |
+| `products/vityo_app/lib/src/ide/agent_client/mcp/vityod_mcp_gateway.dart` | Typed MCP security gateway | Revision-scoped grants, revocation, redacted reads, and preview-only edit proposals |
+| `products/vityo_app/native/vityod/crates/vityod-agent-host/src/acp.rs` | Daemon-owned ACP process and session authority | Minimal environment, bounded frames, correlation, capability revocation, and orphan-free shutdown |
+| `products/vityo_app/lib/src/ide/workbench/agent_collaboration/` | Immutable Workbench projection | Permission lifecycle, proposal review, and terminal-state cleanup |
+| `products/vityo_app/lib/src/ide/workspace/workspace_transaction_service.dart` | Workspace mutation authority | Revision conflict detection, preview, commit, reject, and rollback |
+| `products/vityo_app/lib/src/view_ide/environment/execution/execution_sandbox.dart` | Local execution policy: cwd containment, trust, approval, network, env allowlist, timeout | Command safety, resource bounds, structured denial |
+| `products/vityo_app/lib/src/view_ide/environment/configuration/log_redactor.dart` | Pattern-based and field-based credential redaction | All log, diagnostic, runtime, and agent-context output redaction |
+| `products/vityo_app/lib/src/view_ide/environment/configuration/secret_store.dart` | Credential reference lookup and local secret store | Secret resolution, no raw credential exposure |
+| `products/vityo_app/lib/src/view_ide/module_host/module_manifest_security.dart` | Module manifest trust validation, quarantine, rollback | Schema validation, permission allowlist, signature/checksum verification, engine compatibility |
+| `scripts/check_security_baseline.py` | Security-critical file existence and forbidden-pattern scan | Required file list, forbidden pattern definitions |
+| `scripts/supply-chain-governance-gate.py` | CI/CD and supply-chain governance: workflow permissions, Dependabot, SBOM, secret scan | Workflow security, Dependabot coverage, SBOM markers, secret ignore, secret scan |
+| `scripts/dependency-policy-gate.py` | Direct dependency registration enforcement in `DEPENDENCY-USAGE.md` | Flutter/Dart, Cargo workspace, and prototype npm manifests |
+| `scripts/vityo_rust_notices.py` | Locked Rust license evaluation and third-party notice generation | Coding Agent and `vityod` Cargo graphs |
+| `scripts/github-actions-pin-gate.py` | GitHub Actions SHA-pinning audit and enforcement | Action version pinning, mode (audit/enforce) |
+| `scripts/check_license_policy.py` | Package license allowlist and forbidden-license marker check | License policy, prohibited marker detection |
+| `DEPENDENCY-USAGE.md` | Lightweight SBOM: dependency inventory, license, source boundary, usage boundary | SBOM evidence surface |
+| `docs/governance/SECURITY-AND-SUPPLY-CHAIN.md` | This policy document | Policy definitions, governed invariants, owned files, downstream consumers |
+| `docs/specs/audit/CODE-AUDIT-CHECKLIST.md` | Mandatory audit checklist for agents and reviewers | Seven design principles, lifecycle test coverage, data lifecycle safety, delivery-gate strictness |
+
+### 8.2 Downstream Consumers
+
+The following plan nodes, components, and CI surfaces consume this security contract:
+
+1. **Better Plan security-permissions-audit implementation checkpoint**: Implements the behavior defined by this contract. Changes must satisfy invariants listed in sections 2.4–2.10, 5.3, 6.1–6.2.
+2. **Better Plan security-permissions-audit release-evidence checkpoint**: Validates that gates, tests, and documentation satisfy launch readiness.
+3. **Better Plan Windows / Linux / macOS desktop adaptation nodes**: Consume execution sandbox and tool permission boundaries for platform-specific process execution.
+4. **Better Plan module-extension-contributions and module-runtime-staged-update**: Consume module manifest security policies for extension activation and staged update safety.
+5. **Better Plan IDE product hardening**: Consumes protocol permission/change projections and
+   workspace transactions; Agent tool execution hardening belongs to the companion runtime track.
+6. **Better Plan documentation-governance-release-gates**: Validates that governance gates (supply-chain, security baseline, dependency policy) remain wired in CI.
+7. **`.github/workflows/audit.yml` and `.github/workflows/repo-hygiene.yml`**: Wire governance gate scripts into CI execution.
+8. **Release readiness gate (`scripts/release-readiness-gate.py`)**: Validates that all governance gates pass before release.
+
+### 8.3 Invariant Summary
+
+| Invariant | Owned By | Enforcement |
+|-----------|----------|-------------|
+| Dangerous Agent actions have permission/approval/denial/audit | Coding Agent `policy/`, `tools/`, `sessions/`; shared protocol; IDE decision presentation | Runtime policy/journal plus protocol receipt and IDE user decision |
+| Credentials redacted in UI, logs, runtime, Agent context | Runtime redaction; IDE `log_redactor.dart`, `secret_store.dart`, context projection | Pattern-based + field-based redaction; security baseline gate scans for raw literals |
+| Module manifests validated before activation | `module_manifest_security.dart` | Schema + signature + checksum + permission allowlist + engine compatibility |
+| Execution sandbox enforces containment and resource limits | `execution_sandbox.dart` | CWD containment, traversal/symlink detection, env allowlist, timeout, output limits |
+| Agent runtime effects default to least privilege | Coding Agent `policy/`, `tools/`, and `sessions/` | Risk/root/network/credential policy, current grants, bounded redacted receipts |
+| Dependencies registered in SBOM | `dependency-policy-gate.py` + `DEPENDENCY-USAGE.md` | Gate exits non-zero for unregistered deps |
+| CI workflow actions SHA-pinned | `github-actions-pin-gate.py` | Enforce mode |
+| High-signal secrets not committed | `supply-chain-governance-gate.py` | Secret scan over `.github/`, `scripts/`, `docs/governance/`, policy files |
+
+### 8.4 Agent Runtime Boundary
+
+The Rust Coding Agent is the sole first-party Coding Agent runtime and is launched as an independent
+ACP stdio process. The shared Dart protocol package remains the client-side wire binding; it does not
+contain or own Agent runtime behavior. Deterministic runtime and client-operation coverage establish
+engineering behavior only. Live provider conversations and real development tasks remain separate
+acceptance workflows.
+
+There must be no debug-only, prototype-only, lab-only, or hidden switch that bypasses permission
+checks. Capability gaps must appear as structured blocked states with owner, reason, and recovery
+path.
+
+## 9. Incident Response
+
+### 9.1 Credential Leak
+
+If a credential is accidentally committed:
+1. Immediately revoke the credential from the provider.
+2. Purge from git history (`git filter-branch` or `BFG`).
+3. Rotate to a new credential.
+4. Update credential reference in configuration.
+
+### 9.2 Dependency Vulnerability
+
+If a dependency has a known vulnerability:
+1. Assess impact (is Vityo using the vulnerable code path?).
+2. Update to patched version if available.
+3. If no patch, apply workaround or remove dependency.
+4. Document in release notes.
+
+## 10. Cross-Reference
+
+- [API Compatibility](./API-COMPATIBILITY.md)
+- [Release Checklist](./RELEASE-CHECKLIST.md)
+- [Architecture Runbook](../teams/ARCHITECTURE-RUNBOOK.md)
+- [Agent Runtime Runbook](../teams/AGENT-RUNTIME-RUNBOOK.md)
+- [Vityo Agent-Native IDE Architecture](../design/Vityo-Agent-Native-IDE-Architecture.md)
+- [Code Audit Checklist](../specs/audit/CODE-AUDIT-CHECKLIST.md)
+- [Technology Component Inventory](../specs/TECHNOLOGY-COMPONENT-INVENTORY.md)
+- [Release Readiness Gate](../../scripts/release-readiness-gate.py)
+- [Security Baseline Gate](../../scripts/check_security_baseline.py)
+- [Supply Chain Governance Gate](../../scripts/supply-chain-governance-gate.py)
+- [Dependency Policy Gate](../../scripts/dependency-policy-gate.py)
+- [GitHub Actions Pin Gate](../../scripts/github-actions-pin-gate.py)

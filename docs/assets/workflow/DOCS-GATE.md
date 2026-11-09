@@ -1,6 +1,6 @@
 # Docs Gate
 
-**Purpose:** Define the common docs/process gate entrypoint for `styio-view` so contributors can run owner-runbook maintenance, docs audit, and ecosystem CLI contract consistency through one command.
+**Purpose:** Define the common docs/process gate entrypoint for `Vityo` so contributors can run owner-runbook maintenance, docs audit, and ecosystem CLI contract consistency through one command.
 
 **Last updated:** 2026-04-19
 
@@ -30,4 +30,4 @@ Push or CI docs gate:
 2. `python3 scripts/docs-audit.py`
 3. `python3 scripts/ecosystem-cli-doc-gate.py`
 
-`docs-audit.py` runs with `STYIO_SKIP_TEAM_DOC_GATE=1` when invoked through this entrypoint so the owner gate uses the requested change source exactly once.
+`docs-audit.py` runs with `VITYO_SKIP_TEAM_DOC_GATE=1` when invoked through this entrypoint so the owner gate uses the requested change source exactly once.

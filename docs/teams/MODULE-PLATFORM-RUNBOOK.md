@@ -2,7 +2,7 @@
 
 **Purpose:** 提供 module host、platform capability、六端 runner 与分发路径的日常维护入口。
 
-**Last updated:** 2026-04-23
+**Last updated:** 2026-07-30
 
 ## Mission
 
@@ -12,23 +12,30 @@
 
 Primary paths:
 
-1. `frontend/styio_view_app/lib/src/module_host/`
-2. `frontend/styio_view_app/lib/src/platform/`
-3. `frontend/styio_view_app/assets/module_manifests/`
-4. `frontend/styio_view_app/assets/capability_matrices/`
-5. `frontend/styio_view_app/android/`
-6. `frontend/styio_view_app/ios/`
-7. `frontend/styio_view_app/linux/`
-8. `frontend/styio_view_app/macos/`
-9. `frontend/styio_view_app/windows/`
-10. `frontend/styio_view_app/web/`
-11. `docs/specs/DISTRIBUTION-CHANNEL-POLICY-SCHEMA.md`
+1. `products/vityo_app/lib/src/view_ide/module_host/`
+2. `products/vityo_app/lib/src/view_ide/module_host/`
+3. `products/vityo_app/lib/src/platform/`
+   - `browser_virtual_file_system_provider.dart` — browser virtual FS provider (Web target)
+   - `file_system_operation_result.dart` — structured file system operation result type
+   - `file_system_provider.dart` — file system provider abstract contract
+   - `memory_file_system_provider.dart` — in-memory FS provider for testing
+3. `products/vityo_app/assets/module_manifests/`
+4. `products/vityo_app/lib/src/view_ide/module_host/module_manifest_security.dart`
+5. `products/vityo_app/assets/capability_matrices/`
+6. `products/vityo_app/android/`
+7. `products/vityo_app/ios/`
+8. `products/vityo_app/linux/`
+9. `products/vityo_app/macos/`
+10. `products/vityo_app/windows/`
+11. `products/vityo_app/web/`
+12. `products/vityo_app/scripts/bootstrap_flutter_platforms.sh`
+13. `docs/specs/DISTRIBUTION-CHANNEL-POLICY-SCHEMA.md`
 
 Key SSOTs:
 
-1. `系统架构 -> ../design/Styio-View-System-Architecture.md`
+1. `系统架构 -> ../design/Vityo-System-Architecture.md`
 2. `仓库边界 -> ../specs/REPOSITORY-MAP.md`
-3. `实现计划 -> ../plans/Styio-View-Implementation-Plan.md`
+3. `活跃缺口登记 -> ../design/Vityo-Implementation-Gaps.md`
 4. `卸载与 hosted 保留策略 -> ../adr/ADR-0015-uninstall-reclamation-and-hosted-workspace-retention.md`
 
 ## Daily Workflow
@@ -39,6 +46,13 @@ Key SSOTs:
 4. 若 distribution 或 install/unmount 语义变化，同时检查 schema、里程碑和测试目录。
 5. `module_lifecycle.dart` 只表达最小 lifecycle plan：mount、leave unmounted、uninstall reclaim 和 blocked core-module uninstall；不要在本轮扩展到真实 staged package update 或远程 module registry。
 6. 平台支持、可见性和默认挂载必须来自 manifest/capability rule，不允许用 UI 层临时判断替代 module rule。
+7. module manifest security 必须在 activation 前完成 schema、permission、capability 和 trust 检查；未知 privileged capability 默认拒绝，不允许由 UI 层临时放行。
+
+8. Browser and memory file-system provider changes must preserve lexical path/URI behavior across Web, Linux, macOS, and Windows; update Windows path tests when provider normalization, separators, or URI handling changes.
+9. Module package store changes must keep the public `src/module_host/` entrypoint and the IDE-owned `src/view_ide/module_host/` implementation in sync; update package-store persistence, validation, and rollback tests together.
+10. Flutter platform bootstrap script changes must preserve Windows host, WSL Debian, and Docker Linux behavior, including executable bits, LF line endings, and explicit toolchain path overrides.
+11. The `agent.surface.basic` capability matrix describes where the Agent Workbench can connect to Vityo Coding Agent or another compatible Agent through the versioned protocol. It must not imply that Vityo owns or directly connects to a model provider.
+12. The `agent.surface.basic` module manifest is the protocol-only Agent Workbench module contract: it may contribute Agent Client, collaboration-projection, and workspace-transaction capabilities, but must not restore model-provider adapters, profile injection, or an IDE-owned tool loop.
 
 ## Change Classes
 
@@ -51,7 +65,10 @@ Key SSOTs:
 Minimum:
 
 ```bash
-cd frontend/styio_view_app && flutter analyze && flutter test
+cd products/vityo_app && flutter analyze && flutter test
+cd products/vityo_app && flutter test test/module_package_store_test.dart
+python3 scripts/check-linux-packaging-gate.py
+python3 scripts/check_security_baseline.py
 python3 scripts/repo-hygiene-gate.py --mode tracked
 ```
 
@@ -66,7 +83,17 @@ python3 scripts/repo-hygiene-gate.py --mode tracked
 
 Record:
 
+For module package-store and platform bootstrap changes, include the host matrix used for verification: Windows native, WSL Debian, Docker Linux, or the exact blocker for any missing host.
+
 1. 变更影响的平台和 module surface。
 2. 更新过的 manifest、matrix 和 schema。
 3. 已确认的 iOS-safe / non-iOS-only 路径。
 4. 下一个平台验证步骤与回滚点。
+
+### 2026-06-25 — Compilation fixes (architecture alignment audit)
+
+- `file_system_provider.dart`, `browser_virtual_file_system_provider.dart`, `memory_file_system_provider.dart`: Added direct import of `file_system_adapter.dart` (`FileSystemCompatibility` not available through transitive import); implemented `supportsScheme()` override required by `implements FileSystemProvider`.
+- `file_system_operation_result.dart`: Rewrote sealed-class object patterns to `is`/`as` type checks for Dart SDK compatibility; added explicit `const` constructor for sealed superclass.
+- No behavioral changes. All existing API contracts preserved.
+
+2026-07-31: Completed the `agent.surface.basic` protocol-only migration. The manifest now activates the presentation-owned Agent Workbench entrypoint and advertises only Agent Client, collaboration-projection, and workspace-transaction capabilities; provider adapters and profile injection are explicitly disabled. The capability matrix retains the same six-platform availability and distribution policy.

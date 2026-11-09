@@ -1,0 +1,205 @@
+# Vityo Implementation Gaps
+
+**Purpose:** Track current implementation and integration facts that ground the two delivery tracks for one Vityo product without duplicating their workflow state.
+
+**Last updated:** 2026-10-12
+
+**Latest audit run:** 2026-06-25 02:00–02:30 UTC
+
+**Status:** Active gap register
+
+**Latest gate run (2026-06-25):** See section 10 — Verified Gate Results.
+
+## 1. Scope
+
+This document is the owner register for current gaps. Transient Better Plan workflow state and
+execution ordering stay outside the repository; maintained engineering requirements and commands
+remain in product documents and the test catalog.
+
+Completed or accepted design baselines live in [Vityo-Delivered-Design-Baseline.md](./Vityo-Delivered-Design-Baseline.md). This document only records missing implementation, missing integration, unresolved upstream contracts, missing validation, or unsettled design decisions.
+
+Status values:
+
+| Status | Meaning |
+|---|---|
+| Open | Work is not complete. |
+| Upstream blocked | Vityo needs a Styio or Pafio machine contract before final closure. |
+| Implementation needed | Design exists, but repo-local implementation is missing or incomplete. |
+| Partially implemented | Repo-local anchors exist, but the full product or integration path is not complete. |
+| Validation needed | Code or design anchors exist, but product-level gates are not proven. |
+| Decision needed | The design boundary is not settled enough to implement. |
+
+## 1.1 Agent-Native Convergence Gap
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| Retire IDE direct model-provider/controller ownership | Closed | Vityo IDE + Coding Agent runtime | Vityo IDE no longer owns model/provider transport, prompt profiles, coding-loop orchestration, tool-loop policy, or durable Agent session controllers. Collaboration goes exclusively through the versioned Agent Client (`lib/src/ide/agent_client`), immutable Workbench projections (`lib/src/ide/workbench/agent_collaboration`), and presentation Workbench UI (`lib/src/presentation/agent_workbench`). Model/provider and durable Agent ownership remain in compatible Agent runtimes. IDE retains revisioned context export, permission presentation, change review, and workspace transactions. |
+| Agent Workbench product closure | Partially implemented | Vityo | Prove a task loop with plan visibility, explicit permission decisions, revision-bound change preview, IDE-owned apply/rollback, and verification receipts through the shared Agent protocol. The IDE must also prove `edit -> analyze -> test -> run -> observe` with no Agent connected. |
+
+## Task-resource Consumer Evidence Boundary
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| Accepted task-resource source produces editor syntax errors | Repaired; scoped integration verified | Styio, coordinated with Vityo | The coordinator accepted the U3 CLI/LSP correction. The independent Vityo document selection now passes good/error/repaired and stale-revision assertions through the production daemon path. Historical failure evidence remains under `build/task-resource-repair/`; current targeted evidence is `build/task-resource-review/document-controller.json`. The complete host matrix remains separate. |
+| Complete production task-resource matrix | Scoped engineering evidence accepted | Vityo independent Reviewer + coordinator join | Coordinator accepted registered integration `d5deb633e4fe8f39e9bad2a56c7ea1de`: all 35 required real cases and four boundaries, process exit 0. The independent closing review reconciles local regression, explicit skips and subsequent input changes in [HANDOFF](../plans/task-resource-delivery/HANDOFF.md). This does not establish other-platform, release or live acceptance; joint delivery remains coordinator-owned. |
+
+## 1.2 Closed Since The Previous Register Update
+
+| Item | Closed | Evidence |
+|---|---|---|
+| Pafio execution-envelope drift | 2026-10-05 | `backend_toolchain/execution_adapter_io.dart` now parses the current Pafio `--json` envelope, reads the schema-v1 receipt from `plan.build_root` and diagnostics from `plan.diag_dir`, and reports malformed input as a structured failure instead of a silent null. Closure record: `docs/rollups/OBSERVABLE-DELIVERY-FOLLOW-UPS.md` item 1; coverage in `test/execution_adapter_test.dart`. |
+| Flow Hero hardcoded graph and timer fakes | 2026-10-05 | The canvas projects the real active buffer with source badges, demo timers are gated to explicit demo mode and marked on screen, the source dock reads real buffer lines, quick-open filters the real workspace tree, and RUN/TEST drive the real `pafio` route. Coverage in `test/flow_hero_source_authority_test.dart`, `test/flow_hero_execution_test.dart`, `test/flow_hero_quick_open_test.dart`. |
+
+## 2. Language And StyioService Gaps
+
+**Language-service route (2026-10-05).** The platform analysis driver now prefers a discovered
+`styio_lspd` (LSP 3.17 over stdio) over the CLI JSONL connector, both in the IDE shell
+(`createPlatformStyioServiceAnalysisDriver`) and in Flow Hero (`flow_hero/language_service.dart`).
+Document-level analysis — diagnostics, semantic tokens, document symbols, inlay hints — is wired
+through the routed service; the position-scoped requests (completion, hover, definition, references,
+rename, code actions) are implemented in the LSP connector but are not yet merged into the
+cached/routed service, and `textDocument/formatting` stays honestly unavailable. `styio_lspd`'s
+implemented request surface is defined by `styio-nightly`'s `src/StyioServices/StyioLSP/Server.cpp`
+and `StyioServices/MANIFEST.md`; the "Current Limits" note in that repository's
+`docs/external/for-ide/LSP.md` claiming `rename`/`codeAction`/`inlayHint` are unimplemented is stale
+and must not be treated as the capability contract.
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| ResolvedElement / ResolvedReference | Partially implemented | StyioService first, Vityo adapter second | Vityo has local and StyioService-backed `ResolvedElement` / `ResolvedReference` binding through `SemanticSnapshot`, and the `styio_lspd` connector maps position-scoped definition/reference results into those forms. Remaining closure: merge the position-scoped resolution facts into `SemanticSnapshot` for all language constructs, have StyioService expose stable compiler-owned resolution facts, and remove local semantic heuristics where compiler facts exist. |
+| SemanticSnapshot | Partially implemented | StyioService first, Vityo adapter second | Vityo can build `SemanticSnapshot` from local facts, merged `StyioDocumentAnalysis`, and StyioService-backed symbols/references. `StyioServiceResponse` exposes payload counts and a raw-output-safe status envelope for caches/status panels. Language result cache can bind to Toolchain catalog change streams, invalidate stale toolchain entries, keep the persisted metadata-only manifest aligned with cache invalidation, persist a manifest from `StyioServiceAnalysisDriver`, and expose manifest change observation. The `styio_lspd` route now supplies document-level diagnostics, semantic tokens, document symbols, and inlay hints to this snapshot when the daemon is present. Remaining closure: merge the position-scoped `styio_lspd` facts, upstream type facts, scope graph, stable semantic-token classifications, stale-snapshot identity, and cross-document/project facts into a stable upstream semantic payload. |
+| ProviderRegistry | Partially implemented | StyioService and Vityo | Vityo has capability-aware `LanguageProviderRegistry`, metadata-only `LanguageProviderRegistryManifest` projection with JSON roundtrip, Service-owned manifest persistence through `LanguageProviderRegistryManifestStore`, derived capability states, snapshot-driven provider descriptor/registration helpers, `StyioServiceCapabilityRegistrar`, `StyioServiceCapabilityNegotiator.analyzeAndRefresh`, `StyioServiceCapabilitySession` refresh/dispose lifecycle, and `StyioServiceRuntimeSession` as the local lifecycle anchor that keeps provider manifest metadata aligned with runtime registration and emits metadata-only lifecycle events. Remaining closure: upstream provider capability contract and wiring to real long-lived StyioService server/session events. The analysis driver already prefers a discovered `styio_lspd` over the CLI JSONL connector; the provider contract still needs to describe that route. |
+| Rename | Partially implemented | Vityo | Updated (2026-10-05): `styio_lspd` implements `textDocument/rename` (see `Server.cpp`); the Vityo LSP connector maps the returned LSP `WorkspaceEdit` into a `RenamePlan` (`lsp_styio_service_connector.dart`, covered by `test/lsp_styio_service_connector_test.dart`). Remaining closure: route the position-scoped rename through the cached/routed language service and build the rename dialog, preview, and apply-from-service path on top of it. |
+| Code actions | Partially implemented | Vityo | Updated (2026-10-05): `styio_lspd` implements `textDocument/codeAction`; the LSP connector maps results into quick fixes and the editor lightbulb is wired. Remaining closure: route position-scoped code actions through the cached/routed service and complete preview/apply for service-authored raw edits. |
+| Formatting | Upstream blocked | StyioService + Vityo | Updated (2026-10-05): `styio_lspd` does not implement `textDocument/formatting`, and the LSP connector reports it as honestly unavailable rather than fabricating edits. Closure: TextEdit-style edits and range rules from the language service; command UI, save hook, and preview in Vityo. |
+| Inlay hints | Partially implemented | Vityo | Updated (2026-10-05): `styio_lspd` advertises `inlayHintProvider`, and the document analysis pass maps hints into `StyioDocumentAnalysis.inlayHints` (`lsp_styio_service_connector.dart`). Remaining closure: render hints in the editor and expose their settings. |
+| Embedded parser API | Upstream blocked | styio-nightly | Stable embedded parser facade or published syntax-check API consumable by Vityo. |
+| Mandatory `.true.styio` / `.false.styio` gate | Validation needed | Vityo | `LanguageFixtureFileCollector`, `LanguageFixtureFileSystemTextLoader`, `LanguageFixtureConfidenceMatrixBuilder`, `StyioServiceFixtureValidator`, and `LanguageFixtureGateRunner` compose the connector-backed fixture gate; `tool/language_fixture_gate.dart` remains the focused module command. The canonical `python3 scripts/vityo.py test` stage resolves the pinned real Styio executable and invokes the fixture command for the parser-backed language fixture roots. A missing executable fails the required test stage. Remaining closure: confirm the GitHub-hosted CI run after the sibling `styio-nightly` build on the remote runner. |
+| Fixture corpus cleanliness | Validation needed | Vityo + StyioService | Re-run syntax validation against real Styio parser before claiming parser-clean fixtures. |
+
+## 3. Editor Gaps
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| Editor File Binding implementation | Validation needed | Vityo | Repo-local implementation covers load, save, watch, conflict detection, deleted-file state, readonly state, provider unavailable state, structured error mapping, and provider recovery back to clean bound state. Remaining closure: platform/product release validation across non-local providers as those providers become available. |
+| Editor File Binding tests | Validation needed | Vityo | Existing tests cover open/save, conflict, deleted-file save failure, readonly save failure, provider-unavailable save failure, resource watch state updates, shell save command persistence, shell-level external-change acceptance, direct resource-watch-to-shell reload of clean external changes, editor conflict recovery banner rendering, readonly/provider-unavailable banner rendering, readonly-to-writable shell recovery state, and provider-unavailable-to-clean reconnect UI recovery. Remaining closure: release/product-gate evidence, not missing reconnect coverage. |
+| Document revision to language snapshot binding | Partially implemented | Vityo | `CachedStyioLanguageService` reads cache entries by `documentId`, `revision`, `protocolVersion`, and optional `toolchainId`; `StyioServiceResultAdapter` rejects stale responses before merging analysis. Unit coverage now proves stale cached revisions do not feed diagnostics, hover, completion, semantic spans, references, or rename. Shell-level file binding coverage now proves manual acceptance and resource-watch delivery both reload a new document revision and drop old cached diagnostics. `FileSystemWorkspaceDocumentStore.watchDocument` now proves save/watch/reload delivery of text plus revision through the concrete local File System Manager route. Remaining closure: prove the same behavior across remote/browser/virtual providers when those providers exist. |
+| Project-file vs IDE-state persistence split | Partially implemented | Vityo | User/project files use File System Manager; `EditorSessionDataStore` now persists tabs, active document, cursor offsets, selection anchors, and dirty document ids through an Interaction-owned Foundation DataStore Owner scoped by workspace. `EditorSessionController.toSessionSnapshot` provides the controller-to-store bridge, and `ShellRuntimeModel.persistEditorSession` / `restoreEditorSession` can explicitly save and restore the live shell editor session when the active document matches. Remaining closure: automatic save/restore policy, cross-document reopen behavior, and broader recovery handling. |
+| Cache Contract | Partially implemented | Vityo | Cache contract documented in `docs/contracts/CacheContract.md`. Language cache submodule (`view_ide/language/cache/`) implements `LanguageCache` with Two-Level LRU + dependency invalidation. Cache keys include documentId, revision, workspaceGraphHash, toolchainId, providerId, protocolVersion, semanticPayloadVersion. All cache families identified: language result, semantic snapshot, project graph, file gist, runtime event derived, AI context. Remaining closure: publish the `CacheStore<K,V>` interface that the contract mandates; implement the contract's `observe()` method on LanguageCache; implement DataStore-backed Level 2 persistence; build the Project Graph, File Gist, Runtime Event Derived, and AI Context cache families that the contract lists. |
+
+## 4. DataStore And Registry Gaps
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| DataStore API | Partially implemented | Vityo | Foundation DataStore now has scoped namespaces, schema states, migration-on-read persistence, owner boundaries, file-backed records through File System Manager, lock-serialized writes, transactional JSON update/delete semantics, explicit write/delete/keep edit decisions, and scoped change subscriptions. Remaining closure: broader persistence policy and product-level adoption. |
+| DataStore Owner implementations | Partially implemented | Vityo | Configuration uses a Foundation DataStore Owner with namespace-prefix enforcement and exposes setting change observation plus transaction-backed updates. Credential DataStore persists through its own Configuration-owned Foundation DataStore Owner and uses transaction-backed writes/deletes with no-op support. Language result cache manifest storage and language provider registry manifest storage use Service-owned Foundation DataStore Owners. Registry manifest storage also uses a DataStore Owner. Editor session state now uses an Interaction-owned Foundation DataStore Owner. Remaining closure: User, Appearance, Runtime, Extension, and Fallback owners where stateful behavior exists. |
+| File-backed DataStore persistence | Partially implemented | Vityo | Foundation DataStore persists local file-backed records through File System Manager without reversing the dependency, with unit coverage for the persisted path. Remaining closure: non-local provider validation and broader product-level DataStore owner adoption. |
+| DataStore migrations | Partially implemented | Vityo | Foundation DataStore applies named read-time migrations from stored schema state to target schema state, writes migrated records back while holding the record lock, and has tests for persisted migration and missing migration failure. Remaining closure: layer-owned migration policy coverage for concrete persisted IDE state families. |
+| Registry implementation | Partially implemented | Vityo | Foundation Registry now supports validated registration, lookup, filtered listing by kind/owner/state, lifecycle state, metadata updates, immutable manifest projection, runtime-value exclusion, and generic owner/category registrars for schema, provider, command, capability, renderer, and policy categories. Remaining closure: adopt these registrars in each concrete layer and remove ad-hoc registration paths. |
+| Registry manifests | Partially implemented | Vityo | Foundation Registry manifest projection and DataStore-backed manifest persistence exist. Remaining closure: local layer manifest producers and external manifest index without driving internal flow steps through registry. |
+| Registry/DataStore separation tests | Partially implemented | Vityo | Foundation tests cover runtime-value exclusion from registry manifest projection and DataStore-backed manifest persistence. Remaining closure: concrete layer registrars must adopt the same separation instead of keeping ad-hoc provider state. |
+
+## 5. Environment And File System Gaps
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| File System Manager implementation | Implemented for desktop daemon routing | Vityo | `VityodFileSystemManager` provides scoped stat/read/write/list/delete/watch/copy/move, executable-bit operations, normalized containment, paged service calls, and structured failures. Desktop production has no direct Dart file-system implementation; hosted providers retain their explicit routes. |
+| Desktop file-system authority | Implemented | Vityo | Canonical roots, symlink escape checks, durable document revisions, crash-recoverable transactions, watch overflow, and incremental text indexing are owned by packaged `vityod`. Dart keeps only the typed gateway and immutable projections. |
+| Remote/browser/virtual providers | Partially implemented | Vityo | `MemoryFileSystemProvider` and `BrowserVirtualFileSystemProvider` are implemented in `products/vityo_app/lib/src/platform/`. `HostedWorkspaceFileSystemProvider` is implemented in `products/vityo_app/lib/src/ide/workspace/` for `vityo-hosted://` document load/save routes backed by `HostedWorkspaceDocumentStore`, with unpublished hosted file-system operations represented as structured unsupported failures. `FileSystemOperationResult<T>` provides structured outcomes. URI schemes: file://, memory://, browser-vfs://, vityo-hosted://. Remaining closure: broaden product adoption and validate any future non-document hosted operations only after the hosted control-plane contract publishes them. |
+| File System Prober placement | Decision needed | Vityo | Decide whether it is documented under Platform Detector or File System Manager internals. |
+| `canX` preflight API set | Decision needed | Vityo | Decide which preflight checks are worth exposing before execute-and-classify behavior. |
+| Platform Manager interface implementation | Implemented for the desktop service boundary | Vityo | `PlatformManagerBundle` composes file, process, shell, resource and PTY gateways from one `VityodClient`; network, clipboard and notifications retain their separate platform contracts. Unsupported and hosted targets remain explicit rather than loading native transport. |
+| Platform Context consumption | Partially implemented | Vityo | Platform Context now normalizes component fact `targetId` values at compose/load/copy time, `Platform Adapter` produces compatibility snapshots, and manager factories consume context facts plus adapter-derived compatibility. Remaining closure: broader product adoption and non-local provider validation. |
+| Environment Variable Configuration implementation | Partially implemented | Vityo | `EnvironmentVariableConfigurationStore` persists IDE-owned env overlays through Configuration Store, `EnvironmentVariableFileLoader` reads env files through File System Manager, `EnvironmentVariableFileParser` parses env-file text with variable-name validation, `EnvironmentVariableResolver` builds launch-time process env without mutating OS global environment, `EnvironmentVariableRedactionPolicy` exposes display-safe env projections, Toolchain launch paths consume overlays through `ToolchainEnvironmentBuilder`, Terminal Runtime consumes the resolver before PTY launch, and Execution Manager consumes it before generic process execution. Remaining closure: product-wide adoption of redacted status projections at every consumer boundary. |
+| OS system environment writer | Decision needed | Vityo | Only add as explicit setup tool if required; never as default settings behavior. |
+
+## 6. Toolchain And Execution Gaps
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| Real JIT compiler/backend contract | Upstream blocked | styio-nightly / backend service | Replace route intent and capability gap with published execution contract. |
+| Toolchain route selection | Partially implemented | Vityo | `BackendExecutionRouteSelection` normalizes workflow/JIT route decisions into `local-cli`, `ffi`, `hosted`, and `blocked` states with adapter kind, allowed/preview flags, detail, and blocked reason for build/run/test surfaces. Shell `run` command gating consumes this normalized selection instead of raw summary text or preview flags. Native build/test results carry top-level `backendRouteSelection` metadata, and IDE-owned Runtime / Project Workflow surfaces render the normalized route kind. Any future Agent consumption must use a bounded, revisioned protocol fact rather than an IDE provider/profile or command-dispatch compatibility path. Remaining closure: extend route policy from metadata reporting into real build/test product workflow fixtures. |
+| System Styio discovery | Implemented | Styio / Vityo | Styio owns compiler distribution and machine contracts. Vityo resolves the system compiler through `VITYO_STYIO_BIN` or `PATH`, consumes `styio --machine-info=json`, and surfaces a blocked state when the executable or contract is unavailable. Vityo does not install, update, pin, switch, or cache Styio. |
+| Flow Hero local toolchain install | Partially implemented | Vityo | Updated (2026-10-05): the app-bundled `pafio` (and `styio`) component is now part of the package on nightly manifests, and Flow Hero has a real local-binary install flow (`flow_hero/toolchain_install.dart`, `flow_hero/toolchain_store.dart`). When the execution route reports pafio or styio missing, the RUN strip and the settings execution row open a dialog that shows the locations actually probed (env var, stored selection, bundled copy, system paths), verifies a user-selected binary with a real `--version` probe (plus the executable check Styio discovery itself uses), persists it to `~/.vityo/flow-hero/toolchain.json`, and re-boots the execution route (and the language service when Styio was the fixed tool). Resolution order is env override → stored selection → bundled component → system paths; a stored Styio pick is delivered as the discovery probe's explicit override because the Styio candidate list is checked after the bundled copy. Remaining gap: a signed downloadable release source for pafio/styio — upstream release infrastructure does not exist yet, so the flow points at a binary the user already has instead of pretending to download one. Coverage in `test/flow_hero_toolchain_store_test.dart`, `test/flow_hero_toolchain_install_test.dart`, `test/pafio_cli_discovery_test.dart`. |
+| Normalized toolchain state snapshots | Partially implemented | Vityo | Generic non-Styio catalog snapshots cover registered descriptors, active state, version, executable path, target id, and workspace id. Styio identity is projected separately from its machine contract. Remaining closure: clearer missing-system-compiler recovery and richer selectors for IDE-owned native tools. |
+| Generic tool installation envelopes | Partially implemented | Vityo | Registration, selection, runtime, health, install planning, provenance checks, rollback status, platform failure envelopes, and recovery actions remain available for non-Styio IDE-owned tools. They are not a Styio distribution path. |
+| Toolchain backend handoff examples | Implementation needed | Vityo | Keep examples non-authoritative and aligned with contracts. |
+| Build/run/test product gate | Partially implemented | Vityo | `backend_route_product_gate_test.dart` validates local-cli, hosted, and blocked backend route states against `BackendExecutionRouteSelection`, Runtime Surface rendering, and build/test native result summaries without invoking real compilers or cloud providers. Shell runtime tests assert that native build/test result metadata exposes normalized backend route facts to IDE consumers. Live local/hosted product workflow gates assert `selectBackendExecutionRoute` when `VITYO_PRODUCT_GATE=1` supplies the external fixtures. Updated (2026-10-05): Flow Hero's RUN strip and test button drive real `pafio --json run|test` through `flow_hero/execution_service.dart` when pafio, the Styio compiler, and `pafio.toml` are present, and disable with a named reason otherwise. Remaining closure: keep adding concrete workflow fixtures as product lanes mature. |
+| Package/workflow payload maturity | Implemented baseline | Pafio / Styio Platform | Local project facts consume Pafio metadata v1 and workflow JSON; hosted workspaces consume Platform hosted-workspace v1. |
+
+## 7. Agent, Theme, Module, And Mobile Gaps
+
+Direct IDE model-provider transport, prompt-profile, coding-loop, and durable session-controller
+ownership is retired and closed under §1.1. Vityo IDE does not execute models. Collaboration goes
+through the versioned Agent Client (`lib/src/ide/agent_client`), immutable Workbench projections
+(`lib/src/ide/workbench/agent_collaboration`), and the presentation Workbench
+(`lib/src/presentation/agent_workbench`). Provider validation, provider credentials, model HTTP
+transport, and coding-loop orchestration belong to Agent runtimes. The first-party Rust runtime now
+composes the production provider, ReAct/tools, policy, sessions, and ACP protocol; the remaining
+listed gaps are Flow Hero semantic editing and explicit production MCP server attachment. IDE
+closure remains protocol interoperability, permission presentation, change review, and
+workspace-transaction enforcement.
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| Real AI provider call in the IDE | Closed for Vityo IDE (not applicable) | Compatible Agent | Model/provider HTTP transport, credential-backed provider adapters, durable coding-session controllers, structured provider-transport failure handling, cancel/retry of model calls, Provider Profile endpoint/token reconfiguration, and live provider E2E validation are Agent-runtime owned. Vityo IDE does not host OpenAI-compatible provider calls or mount those controllers. The first-party Rust runtime owns its concrete provider implementation; real remote-provider use remains separate live acceptance. Updated (2026-10-05): Flow Hero now has a real `模型配置` settings path — `flow_hero/model_config.dart` validates the provider facts against the runtime's own rules, writes the launch-contract `provider.json` at the path the descriptor hands the executable, keeps the bearer token in the OS keychain under a fixed service/account (`land.vityo.flow-hero.agent` / `openai-compatible`), and reconnects the agent bridge on save; an unconfigured route keeps the bridge in demo mode with a named reason instead of launching a runtime that exits 78. The full shell's provider management (Provider Profile editing, multi-endpoint failover) remains Agent-runtime/shell work, so this entry stays open. |
+| First-party Coding Agent runtime loop | Closed (deterministic engineering) | Vityo Coding Agent | The Rust executable composes `AgentApplication::from_paths`, `AcpHost::run_stdio`, `ReActRuntime::run_turn`, the OpenAI-compatible SSE provider, authorized ACP operations, cancellation, and durable session/effect journals. Rust unit, contract, executable-protocol, provider-fixture, and cancellation tests cover deterministic behavior; the Flutter client launches the packaged executable through vityod and the fresh-binary process test reaches initialize/session creation without a provider prompt. The single `--stdio-agent` boundary is also the headless interface. A real provider conversation or development task remains separate live acceptance. See [ADR-0021](../adr/ADR-0021-react-agent-runtime-loop.md). |
+| Flow Hero production composition and shared source | Partially implemented | Vityo | For an explicitly opened workspace, `AgentBridge` launches the Rust descriptor and composes `FlowHeroAgentOperationPort`. Standard ACP file/terminal operations use the active path-bound `WorkbenchController` buffer, observed revisions, vityod workspace transaction and PTY owners; source-aware proposals expose correlated Apply/Reject results. Pathless demonstration buffers remain unavailable. The active route remains `FlowHeroApp` rather than `AppBootstrap`/`VityoApp`; complete full-editor/source-dock synchronization, semantic graph authority, and view-state workflows remain unimplemented. Updated (2026-10-05): the canvas now renders a projection of the real active buffer with source badges instead of a hardcoded graph, the source dock reads the selected node's real buffer lines, quick-open filters the real workspace tree, the light/dark choice persists through `flow_hero/theme_store.dart`, and the settings panel names the live/degraded language route honestly. See [ADR-0020](../adr/ADR-0020-source-authoritative-flow-hero.md). |
+| Production ACP MCP server attachment | Open | Vityo Coding Agent | The production runtime supports empty `mcpServers` configuration and explicitly rejects nonempty session/new or session/load attachment with `-32003 MCP capability unavailable`. Retained RMCP client/tool-source modules are library capability, not server launch/attachment. Do not advertise this capability or silently ignore requested servers. Any future production attachment needs a separately scoped implementation and deterministic lifecycle/permission coverage. |
+| Styio semantic flow and source rewire | Upstream blocked | Styio first, Vityo adapter second | The current `LanguageServiceAdapter` facts do not expose the complete revisioned typed program-flow projection or a validated rewire edit proposal. The `styio_lspd` route now supplies document-level semantic facts, but that typed program-flow projection remains unpublished. Extend the existing Styio language-service handoff with semantic identities, direction, source locations, and edit/diagnostic results for supported connections. Vityo owns revision checks, transaction application, cancel/reject behavior, and projection; no generic graph library or Pafio metadata supplies language meaning. See [Styio Language Service Adapter Contract](../external/for-styio/Styio-Language-Service-Adapter-Contract.md) and [ADR-0020](../adr/ADR-0020-source-authoritative-flow-hero.md). |
+| Flow Hero editing, animation, and visual parity | Partially implemented | Vityo | Agent file reads/writes, proposal review, and accepted transaction results are bound to the actual open path and deterministic coverage. Still prove same-document dock/full-editor edits, view-only node moves, accepted/cancelled/stale semantic rewires after Styio support exists, proposal-versus-commit transitions, and source-bound runtime highlights. Animate only observed deltas while preserving manual positions and the tagged visual baseline. Runtime replay must remain distinct from a live stream. |
+| Agent Workbench command closure | Closed (protocol/Workbench) | Vityo | The Workbench command port owns only Agent-session actions: prompt/steer, cancel, retry, reconnect, one-shot permission resolution, and apply/reject/revert of protocol-proposed workspace changes through the injected IDE transaction authority. Ordinary settings, toolchain, build, test, source-control, and editor commands remain IDE-owned shell commands and are not exposed through a hidden Agent command dispatcher. New Agent-triggerable behavior requires an explicit versioned protocol capability, bounded payload, authorization rule, immutable projection, and acceptance oracle. |
+| Secret injection | Partially implemented | Vityo | Configuration-owned `CredentialSecretInjector` resolves short-lived injected values from `CredentialReference`, returns redacted projections for logs/UI, and fails closed for missing/expired/empty/kind-mismatched credentials. Model-provider bearer-token routing and provider-credential injection belong to compatible Agent runtimes, not the IDE. Remaining closure: wire the same injection path into Toolchain execution, remote service connectors, and product credential setup UI. |
+| Local bridge / cloud execution for AI | Closed (not applicable to Vityo IDE) | Compatible Agent | Cloud, loopback local-bridge, and blocked model-execution planning—including endpoint resolution reports, credential readiness, failover across profile endpoints, local-service bridge routing, and endpoint probes—are Agent-runtime owned. Vityo IDE does not mount provider route executors, configured provider adapter factories, provider configurators, or Provider Profile endpoint editors for model execution. AppBootstrap and Workbench retain Agent Client / collaboration wiring only. Multi-fallback management, retry-probe controls, and richer failover history remain Agent-runtime work outside the Vityo IDE delivery track. |
+| Theme editor UI | Implementation needed | Vityo | Visual theme editing panel and live preview. |
+| Theme profile store | Partially implemented | Vityo | Updated (2026-10-05): Flow Hero's binary light/dark choice persists across sessions through `flow_hero/theme_store.dart` (platform file system, vityod-owned where one is wired; in-process fallback otherwise). Remaining closure: the full shell theme profile store for colour-preset overrides and workspace scoping. |
+| Module package staging | Implementation needed | Vityo | Real package download/staging/activation path. |
+| Platform file deletion and resource reclaim | Implementation needed | Vityo | Platform-specific package/cache/data cleanup with user-visible recovery behavior. |
+| Android local-first execution | Partially implemented | Vityo | Backend route selection now keeps Android local-first when a resolved CLI compiler is present, falls back to hosted execution when configured, and blocks with recovery guidance otherwise; remaining closure is Android device/emulator execution evidence. |
+| Mobile interaction matrix | Validation needed | Vityo | Android/iOS input, viewport, commands, editor, runtime, and recovery behavior. |
+| Device/simulator platform gates | Validation needed | Vityo | Android device/emulator and iOS simulator/cloud-route gates. |
+
+## 8. Product Hardening Gaps
+
+| Gap | Status | Owner | Required closure |
+|---|---|---|---|
+| M5 platform matrix | Validation needed | Vityo | Cross-platform route behavior for desktop, Android, iOS cloud, and Web hosted workspace. |
+| M6 IDE hardening | Validation needed | Vityo | Product-level full UI, contract, sample matrix, and workflow gates. |
+| Runtime event product completeness | Partially implemented | Vityo | `StyioServiceRuntimeSession` emits lifecycle events and metadata-only `StyioServiceRuntimeStatusSnapshot` values that expose provider manifest state plus diagnostics/completion/hover/semantic-token capability states and counts without raw language payloads. Interaction now has `LanguageServiceStatusSurface` to project those snapshots into UI-consumable status models without rendering ownership. `AppBootstrap`, `ShellRuntimeModel`, and `EditorSurface` now carry and render that status in the real editor language pane, with a widget-test anchor for the status card surface. Remaining closure: validate the full app flow against a real asynchronous StyioService update on every supported platform. |
+| Hosted workspace retention/export UX | Validation needed | Vityo | User-visible close/export/retention/delete path. |
+| Two-track Better Plan documentation routing | Resolved | Vityo | `docs/plan/` is the canonical workflow root and contains an IDE delivery track plus a first-party companion-runtime delivery track for one Vityo product. Current owner facts stay in design, contract, ADR, review, and validation documents; the current Better Plan tool validates the root manifest, both state files, and requirement labels. |
+
+## 9. Plan and Owner Routing Rule
+
+Do not create a third delivery track or duplicate workflow state in owner documents. Route work by
+delivery track and keep shared protocol changes inside both consuming IDE and Coding Agent
+lifecycles.
+
+Use these destinations:
+
+| Need | Destination |
+|---|---|
+| Stable product/system truth | `docs/design/` |
+| Current implementation or integration fact | `docs/design/Vityo-Implementation-Gaps.md` |
+| Active IDE and Coding Agent execution state | External task plan; see `docs/plan/EXECUTION-RUNBOOK.md` |
+| Upstream Styio handoff | `docs/external/for-styio/` |
+| Upstream Pafio handoff | `docs/external/for-pafio/` |
+| Repository execution guidance | `docs/plan/EXECUTION-RUNBOOK.md` |
+| Open risk or conflict before decision | `docs/review/` |
+| Final architecture decision | `docs/adr/` |
+
+## 10. Current Validation Status
+
+This register does not preserve command-by-command audit snapshots. The canonical delivery command
+is `python3 scripts/vityo.py deliver`; the focused engineering test stage can be run with
+`python3 scripts/vityo.py test`. The orchestrator invokes the lower-level IDE quality engine and
+other scoped validators without duplicating those suites:
+
+```bash
+python3 scripts/vityo.py test
+python3 scripts/vityo.py deliver
+```
+
+The formal run must be bound to a clean source commit and a new receipt destination. Historical
+repair logs belong under `docs/history/` or `docs/release/`; they must not be interpreted as current
+implementation truth here. Remaining work is recorded once in sections 2 through 8 above.

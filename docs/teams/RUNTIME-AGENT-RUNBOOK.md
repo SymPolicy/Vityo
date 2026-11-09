@@ -1,50 +1,90 @@
 # Runtime / Agent Runbook
 
-**Purpose:** 提供 runtime surface、debug/agent 面板、prompt/profile 入口与执行态 UI 的日常维护入口。
+**Purpose:** Define ownership for runtime/debug surfaces and the IDE-side Agent Workbench without assigning Agent-runtime execution to the IDE.
 
-**Last updated:** 2026-07-02
+**Last updated:** 2026-10-03
 
 ## Mission
 
-负责运行态 summary、runtime/debug/agent surface、prompt profile 与 local bridge 入口。该团队不拥有 adapter schema 本身，也不定义模块分发策略。
+Own runtime/debug presentation, the Agent Client projection, and the Agent Workbench. This team
+does not own model/provider routing, Agent tool loops, durable Agent sessions, or multi-Agent
+orchestration; those belong to the compatible Agent runtime.
 
 ## Owned Surface
 
+Pending Agent terminal output and exit waits settle when the session is cancelled or
+closed, the terminal is released, the operation port closes, or the daemon transport
+disconnects. These lifecycle transitions do not impose a wall-clock execution limit.
+
 Primary paths:
 
-1. `frontend/styio_view_app/lib/src/runtime/`
-2. `frontend/styio_view_app/lib/src/agent/`
-3. `docs/specs/AGENT-PROVIDER-ADAPTER-SCHEMA.md`
-4. `docs/specs/PROFILE-SYNC-ADAPTER-SCHEMA.md`
+1. `products/vityo_app/lib/src/view_ide/runtime/`
+2. `products/vityo_app/lib/src/ide/agent_client/`
+   - `agent_client_registry.dart` — thin daemon gateway, immutable session projections, permission presentation, and reconnect coalescing
+   - `mcp/vityod_mcp_gateway.dart` — typed access to daemon-owned root-scoped tools and grants
+   - `native/vityod/crates/vityod-agent-host/` — bounded ACP process lifecycle, correlation, capability enforcement, and orphan-free shutdown
+3. `products/vityo_app/lib/src/ide/workbench/agent_collaboration/`
+4. `products/vityo_app/lib/src/presentation/agent_workbench/`
+5. `products/vityo_app/lib/src/view_render/runtime/`
+6. `products/vityo_app/lib/src/runtime/`
+   - `runtime_event_log.dart` — append-only runtime event log with ring buffer projection
+Review dependency, not an owned path:
+
+1. `products/vityo_coding_agent/src/` — independent Rust runtime; see the [Agent Runtime Runbook](./AGENT-RUNTIME-RUNBOOK.md).
+2. `packages/vityo_agent_protocol/`
 
 Key SSOTs:
 
-1. `产品规格 -> ../design/Styio-View-Product-Spec.md`
-2. `系统架构 -> ../design/Styio-View-System-Architecture.md`
+1. `产品规格 -> ../design/Vityo-Product-Spec.md`
+2. `系统架构 -> ../design/Vityo-System-Architecture.md`
 3. `测试目录 -> ../assets/workflow/TEST-CATALOG.md`
 
 ## Daily Workflow
 
-1. 先确认当前变更是 runtime 可视化、agent 协作入口，还是 profile/prompt 持久化。
+1. 先确认当前变更是 runtime 可视化还是 Agent 协作入口。
 2. 若变更依赖新 adapter payload，先转到 Adapter / Contracts owner 文档确认边界。
-3. 变更 agent panel 时，避免把它退化成外挂聊天框；保持 IDE 内建能力定位。
-4. 变更 profile/prompt 流程时，同步检查本地持久化和 sync adapter 语义。
-5. `agent_profile.dart` 只冻结 provider route、默认 endpoint、profile JSON 和 local-bridge eligibility；本轮不新增真实 AI provider 调用、账号策略或云端 secret 管理。
-6. runtime replay、debug lane 和 hosted execution 摘要必须消费 `backend_toolchain` adapter payload，不得回读 legacy integration façade 或上游 human stderr。
-7. Pafio / Styio-Cloud 重命名或 hosted route 变更时，同步检查 `runtime_surface.dart` 的 visible surface id、label、fallback 文案和 backend handoff 摘要，避免 runtime/debug 入口继续暴露旧包管理器命名或平台所有权。
+3. Treat `Agent Workbench` as the formal capability. `Agent Panel` may remain a concrete view name,
+   but it must show task plan, permission, changes, and verification state rather than define the
+   product as chat.
+4. ProfileSync is a future provider-neutral schema owned by Adapter / Contracts, not a current
+   runtime surface. Do not add model/provider credentials or Agent-runtime prompt configuration to
+   IDE-owned state.
+5. Do not add provider routes, provider SDKs, model credentials, tool loops, policy stores,
+   durable-session stores, or multi-Agent orchestration to the IDE. The Coding Agent is the
+   independent Rust ACP process; the shared Dart protocol package remains its client binding.
+6. runtime replay、debug lane 和 hosted execution 摘要必须消费 `view_ide/backend_toolchain` adapter payload，不得回读已移除入口或上游 human stderr。
+7. IDE-side Agent presentation belongs to `ide/agent_client`, collaboration projections to
+   `ide/workbench/agent_collaboration`, and Flutter presentation to
+   `presentation/agent_workbench`; `vityod` supervises the ACP process and owns daemon workspace
+   and process services, while the independent Rust Agent owns provider, policy, loop, and session
+   state.
+8. UI surfaces may display only redacted protocol context and receipt summaries. Preserve supplied
+   ACP permission `optionId`/`name`/`kind` and return the selected ID exactly. Review source-change
+   proposals as a correlated diff and commit through the existing workspace transaction owner;
+   details live in the [security and supply-chain policy](../governance/SECURITY-AND-SUPPLY-CHAIN.md).
+9. Protocol permission/change semantics or IDE MCP/tool-security changes must update
+   [../governance/SECURITY-AND-SUPPLY-CHAIN.md](../governance/SECURITY-AND-SUPPLY-CHAIN.md).
+
+10. `runtime_event_log.dart` changes must keep replay output deterministic on Windows and POSIX hosts; avoid path separator, line-ending, or clock assumptions in runtime event summaries and tests.
+11. Agent context may compose Pafio metadata, Styio machine facts, and Platform
+    hosted facts only through their formal adapters; it must not expose Pafio
+    private storage or suggest removed compiler-management commands.
 
 ## Change Classes
 
 1. Small: 局部 panel 状态、展示文案或执行态摘要修正。运行 Flutter 最小验证。
-2. Medium: runtime summary、prompt/profile flow、agent provider route、agent panel 行为、hosted execution replay 或 local-only 模式变化。补测试目录映射。
-3. High: 执行态主入口、agent provider 适配路径、profile sync 生命周期或平台执行提示变化。走协调 review。
+2. Medium: runtime summary, Agent Client connection, Agent Workbench behavior,
+   hosted execution replay, or disconnected-Agent state. Update the test catalog.
+3. High: protocol semantics, workspace change application, or the IDE/Agent ownership boundary.
+   Require architecture and security review.
 
 ## Required Gates
 
 Minimum:
 
 ```bash
-cd frontend/styio_view_app && flutter analyze && flutter test
+cd products/vityo_app && flutter analyze && flutter test
+python3 scripts/check_security_baseline.py
 python3 scripts/repo-hygiene-gate.py --mode tracked
 ```
 
@@ -63,3 +103,5 @@ Record:
 2. 当前依赖的 adapter 能力快照和 fallback 路径。
 3. 已更新的 schema 或测试目录条目。
 4. 下一个阻塞点、回滚点与 history 链接。
+
+2026-09-05: Migrated generic runtime-event intake and replay-summary keys to Styio runtime-events v2 (`from_phase`/`to_phase`; retired v1 `message`/`file`/`thread_id` reads). Runtime surface still degrades unknown v2 kinds. No `prototype/` change.
