@@ -92,6 +92,12 @@ INTENTIONAL_FIXTURE_RULES: tuple[
         "Injected ResourceFacts use a synthetic home root for persistence coverage.",
     ),
     (
+        "products/vityo_app/test/observable_graph_surface_test.dart",
+        "Unix home-directory path",
+        re.compile(r"textContaining\('/(?:Users|home)/'\)"),
+        "Assertions verify the observable graph surface never renders home-directory paths.",
+    ),
+    (
         "products/vityo_app/test/platform_context_test.dart",
         "Windows user-profile path",
         re.compile(r"['\"]homePath['\"]\s*:\s*r?['\"]C:\\Users\\[^\\]+"),
