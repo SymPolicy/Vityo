@@ -60,8 +60,8 @@ vityo_copy_flutter_project() {
 
   parent_name="$(dirname "$source_dir")"
   project_name="$(basename "$source_dir")"
-  rm -rf "$dest_root"
   mkdir -p "$dest_root"
+  rm -rf "${dest_root:?}/$project_name"
 
   tar_args=(
     --exclude="$project_name/build"

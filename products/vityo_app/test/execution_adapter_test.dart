@@ -752,6 +752,110 @@ raise SystemExit(65)
   );
 
   test(
+    'execution overlay omits version-control, credential, and generated entries',
+    () async {
+      final tempRoot = await _createTempRoot(
+        'vityo_execution_overlay_exclude_test_',
+      );
+      final sourceFile =
+          File(
+              '${tempRoot.path}${Platform.pathSeparator}scratch${Platform.pathSeparator}main.styio',
+            )
+            ..createSync(recursive: true)
+            ..writeAsStringSync('>_("before")\n');
+      final keepFile =
+          File(
+              '${tempRoot.path}${Platform.pathSeparator}scratch${Platform.pathSeparator}keep.styio',
+            )
+            ..createSync(recursive: true)
+            ..writeAsStringSync('// keep\n');
+      Directory(
+        '${tempRoot.path}${Platform.pathSeparator}scratch${Platform.pathSeparator}.git',
+      ).createSync(recursive: true);
+      File(
+        '${tempRoot.path}${Platform.pathSeparator}scratch${Platform.pathSeparator}.env',
+      ).writeAsStringSync('placeholder\n');
+      File(
+        '${tempRoot.path}${Platform.pathSeparator}scratch${Platform.pathSeparator}id_rsa',
+      ).writeAsStringSync('placeholder\n');
+      File(
+        '${tempRoot.path}${Platform.pathSeparator}scratch${Platform.pathSeparator}build${Platform.pathSeparator}out.bin',
+      ).createSync(recursive: true);
+      File('${tempRoot.path}${Platform.pathSeparator}styio.toml')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('dict_impl = "rbmap"\n');
+
+      final fakeStyio = await _writeExecutable(
+        File('${tempRoot.path}${Platform.pathSeparator}fake-styio'),
+        '''#!/usr/bin/env python3
+import json, os, sys
+
+if len(sys.argv) >= 4 and sys.argv[1] == '--file' and sys.argv[3] == '--error-format=jsonl':
+    run_path = sys.argv[2]
+    overlay_dir = os.path.dirname(run_path)
+    absent = all(
+        not os.path.lexists(os.path.join(overlay_dir, name))
+        for name in ('.git', '.env', 'id_rsa', 'build')
+    )
+    if absent and os.path.lexists(os.path.join(overlay_dir, 'keep.styio')):
+        print(json.dumps({'excluded_entries_absent': True}))
+        raise SystemExit(0)
+
+sys.stderr.write(json.dumps({
+    'category': 'SyntaxError',
+    'code': 'EXCLUDED_ENTRIES_PRESENT',
+    'message': 'overlay carried a version-control, credential, or generated entry',
+}) + '\\n')
+raise SystemExit(65)
+''',
+      );
+
+      final projectGraph = ProjectGraphSnapshot.scratch(
+        workspaceRoot: tempRoot.path,
+        activeFilePath: sourceFile.path,
+        title: 'Scratch Project',
+        notes: const <String>[],
+        activeCompiler: _compilerSnapshot(
+          fakeStyio.path,
+          contracts: const <String, List<int>>{
+            'machine_info': <int>[1],
+          },
+        ),
+      );
+      final adapter = await createExecutionAdapter(
+        platformTarget: PlatformTarget.macos,
+        projectGraph: projectGraph,
+      );
+
+      final session = await adapter.runActiveDocument(
+        platformTarget: PlatformTarget.macos,
+        projectGraph: projectGraph,
+        document: const DocumentState(
+          documentId: 'scratch',
+          text: '>_("after")\n',
+          revision: 2,
+        ),
+        activeFilePath: sourceFile.path,
+      );
+
+      expect(
+        session.status,
+        ExecutionSessionStatus.succeeded,
+        reason: session.statusMessage,
+      );
+      expect(
+        session.stdoutEvents.map((event) => event.message),
+        contains(
+          predicate(
+            (String message) => message.contains('excluded_entries_absent'),
+          ),
+        ),
+      );
+      expect(keepFile.readAsStringSync(), '// keep\n');
+    },
+  );
+
+  test(
     'project execution blocks changed active files that resolve outside the workspace',
     () async {
       final tempRoot = await _createTempRoot(

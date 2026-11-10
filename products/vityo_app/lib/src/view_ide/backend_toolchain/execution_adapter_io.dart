@@ -1648,6 +1648,34 @@ Future<void> _expandOverlayPathChain({
   await fileSystem.writeText(overlayFilePath, documentText);
 }
 
+/// Entry names never copied into an execution overlay: version-control
+/// internals, credential containers, and generated or local-environment
+/// state must not leak into a workspace copy that a compiler or hosted run
+/// can read.
+bool _isOverlaySnapshotExcludedName(String name) {
+  const excluded = <String>{
+    '.git', '.hg', '.svn',
+    '.dart_tool', '.artifacts', '.idea', '.vscode', '.symlinks', '.gradle',
+    '.cxx', '.pafio', 'build', 'node_modules', 'Pods', 'DerivedData',
+    '.env', '.netrc',
+  };
+  if (excluded.contains(name)) return true;
+  final lower = name.toLowerCase();
+  return lower.startsWith('.env.') ||
+      lower.startsWith('id_rsa') ||
+      lower.startsWith('id_ed25519') ||
+      lower.startsWith('id_ecdsa') ||
+      lower.startsWith('id_dsa') ||
+      lower.endsWith('.pem') ||
+      lower.endsWith('.key') ||
+      lower.endsWith('.p12') ||
+      lower.endsWith('.pfx') ||
+      lower.endsWith('.jks') ||
+      lower.endsWith('.keystore') ||
+      lower.endsWith('.mobileprovision') ||
+      lower.endsWith('.provisionprofile');
+}
+
 Future<void> _copySnapshotChildrenIntoOverlay({
   required String sourceDirectory,
   required String overlayDirectory,
@@ -1662,7 +1690,7 @@ Future<void> _copySnapshotChildrenIntoOverlay({
   final entries = await fileSystem.list(sourceDirectory);
   for (final entity in entries) {
     final name = _pathBasename(entity.path);
-    if (name.isEmpty) {
+    if (name.isEmpty || _isOverlaySnapshotExcludedName(name)) {
       continue;
     }
     final overlayPath = _appendRelativePath(overlayDirectory, name);
@@ -1721,7 +1749,7 @@ Future<void> _copySnapshotDirectory({
   final entries = await fileSystem.list(sourceDirectory);
   for (final entity in entries) {
     final name = _pathBasename(entity.path);
-    if (name.isEmpty) {
+    if (name.isEmpty || _isOverlaySnapshotExcludedName(name)) {
       continue;
     }
     final destinationPath = _appendRelativePath(destinationDirectory, name);

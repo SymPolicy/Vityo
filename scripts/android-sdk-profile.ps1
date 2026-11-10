@@ -265,8 +265,9 @@ function Copy-FlutterProject {
 
     $projectName = Split-Path $SourceDir -Leaf
     $destDir = Join-Path $DestinationRoot $projectName
-    if (Test-Path $DestinationRoot) {
-        Remove-Item -Recurse -Force $DestinationRoot
+    New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+    if (Test-Path $destDir) {
+        Remove-Item -Recurse -Force $destDir
     }
     New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
