@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import secrets
 import sys
 import tempfile
 import unittest
@@ -195,7 +196,7 @@ class SupplyChainGovernanceGateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="supply-chain-", dir=REPO_ROOT) as tmp_name:
             root = Path(tmp_name)
             self._write_minimal_tree(root)
-            token = "_".join(("ghp", "0123456789abcdefghijklmnopqrstuvwxyzABC"))
+            token = "ghp_" + secrets.token_hex(18)
             self._write_file(
                 root,
                 "scripts/leaky.sh",

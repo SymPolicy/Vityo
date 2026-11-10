@@ -13,6 +13,7 @@ import io
 import json
 import os
 import runpy
+import secrets
 import sys
 import tempfile
 import unittest
@@ -180,7 +181,7 @@ class PrivacyScannerEdgeCaseTest(unittest.TestCase):
         self.assertEqual(scanned, ["kept.txt"])
 
     def test_sk_prefixed_placeholder_is_inert_only_when_explicitly_labelled(self) -> None:
-        dummy = "sk-" + "x" * 32
+        dummy = "sk-" + secrets.choice("0x") * 32
         labelled = self.privacy.scan_text(
             "synthetic.env",
             f"OPENAI_API_KEY={dummy}  # synthetic fixture",

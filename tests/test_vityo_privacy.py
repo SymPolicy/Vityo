@@ -38,7 +38,7 @@ class VityoPrivacyTest(unittest.TestCase):
         )
 
     def test_scan_text_redacts_credentials_and_local_paths(self) -> None:
-        token = "_".join(("ghp", "A" * 36))
+        token = "ghp_" + secrets.token_hex(18)
         account = "profiletoken42"
         home_path = "/" + "home" + "/" + account + "/project"
         findings = vityo_privacy.scan_text(
@@ -223,7 +223,7 @@ class VityoPrivacyTest(unittest.TestCase):
         self.assertNotIn(token, output.getvalue())
 
     def test_cli_report_is_safe_and_fails_on_a_real_candidate(self) -> None:
-        token = "_".join(("ghp", "B" * 36))
+        token = "ghp_" + secrets.token_hex(18)
         account = "privateprofile42"
         home_path = "/" + "Users" + "/" + account + "/workspace"
         with tempfile.TemporaryDirectory(prefix="privacy-cli-") as temp_name:
